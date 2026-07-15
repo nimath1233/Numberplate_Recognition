@@ -11,7 +11,7 @@ pwd_context = CryptContext(
 
 SECRET_KEY = "ANPR_SECRET_KEY_1999"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440
 
 
 def hash_password(password: str):

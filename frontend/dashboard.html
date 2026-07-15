@@ -1,52 +1,454 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
     <meta charset="UTF-8">
-
-    <title>Dashboard</title>
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NPRS System - Dashboard</title>
     <link rel="stylesheet" href="style.css">
-
+    <!-- Chart.js CDN for interactive data visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-
 <body>
 
-<div class="container">
+<div class="app-layout" id="appLayout">
+    <!-- Sidebar Navigation -->
+    <div class="sidebar">
+        <div>
+            <div class="brand-section">
+                <div class="brand-logo">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                </div>
+                <div>
+                    <div class="brand-name">NPRS System</div>
+                    <div style="font-size: 10px; color: #94a3b8; letter-spacing: 0.5px;">ALPR System</div>
+                </div>
+            </div>
+            
+            <ul class="menu-list">
+                <li class="menu-item active" id="menu-dashboard">
+                    <a onclick="switchTab('dashboard')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg> Dashboard
+                    </a>
+                </li>
+                <li class="menu-item" id="menu-capture">
+                    <a onclick="switchTab('capture')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Live Capture
+                    </a>
+                </li>
+                <li class="menu-item" id="menu-records">
+                    <a onclick="switchTab('records')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg> Records
+                    </a>
+                </li>
+                <li class="menu-item" id="menu-alerts">
+                    <a onclick="switchTab('alerts')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Alerts <span id="alerts-badge" style="background: #ef4444; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 8px; font-weight: bold; display: none;">0</span>
+                    </a>
+                </li>
+                <li class="menu-item" id="menu-settings">
+                    <a onclick="switchTab('settings')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings
+                    </a>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="sidebar-footer">
+            <button onclick="logout()" class="btn-logout">
+                Logout
+            </button>
+        </div>
+    </div>
 
-    <h1>ANPR Dashboard</h1>
+    <!-- Main Content Area -->
+    <div class="main-content">
+        <!-- Top Header -->
+        <div class="header">
+            <div class="header-title">
+                <h2 id="view-title">Dashboard</h2>
+                <p id="view-subtitle">System overview – all cameras</p>
+            </div>
+            <div class="header-actions">
+                <div class="search-container">
+                    <svg class="search-icon-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" placeholder="Search plates..." class="search-input" id="globalSearchInput" oninput="handleGlobalSearch(this.value)">
+                </div>
+                <div class="user-profile">
+                    <div class="user-avatar" id="headerAvatar">A</div>
+                </div>
+            </div>
+        </div>
 
-    <h3 id="welcome"></h3>
+        <!-- Dynamic Panels Viewport -->
 
-    <button onclick="logout()">
-        Logout
-    </button>
-    
+        <!-- 1. OVERVIEW DASHBOARD TAB -->
+        <div id="tab-dashboard" class="tab-section active">
+            <!-- Stats Row -->
+            <div class="stats-grid">
+                <div class="stats-card">
+                    <div class="stats-info">
+                        <h4>Total Detections</h4>
+                        <div class="value" id="stat-total">0</div>
+                        <div class="trend up">+18% vs yesterday</div>
+                    </div>
+                    <div class="stats-icon">🚗</div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-info">
+                        <h4>Allowed</h4>
+                        <div class="value" id="stat-allowed">0</div>
+                        <div class="trend up" style="color: var(--success-color);" id="stat-pass-rate">0% pass rate</div>
+                    </div>
+                    <div class="stats-icon" style="color: var(--success-color); background-color: var(--success-light);">✓</div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-info">
+                        <h4>Flagged / Denied</h4>
+                        <div class="value" id="stat-flagged">0</div>
+                        <div class="trend down" style="color: var(--danger-color);" id="stat-flagged-rate">0% review rate</div>
+                    </div>
+                    <div class="stats-icon" style="color: var(--danger-color); background-color: var(--danger-light);">⚠</div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-info">
+                        <h4>Avg. Confidence</h4>
+                        <div class="value" id="stat-confidence">0%</div>
+                        <div class="trend up">±2.3% deviation</div>
+                    </div>
+                    <div class="stats-icon">📈</div>
+                </div>
+            </div>
 
-    <hr>
+            <!-- Charts Row -->
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <div class="chart-title">
+                            <h3>Hourly Detection Volume</h3>
+                            <p>Today – All Cameras</p>
+                        </div>
+                        <span class="live-badge">Live</span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="hourlyVolumeChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <div class="chart-title">
+                            <h3>By Camera</h3>
+                            <p>Total detections today</p>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="byCameraChart"></canvas>
+                    </div>
+                </div>
+            </div>
 
-    <h2>System Modules</h2>
+            <!-- Recent Detections Table -->
+            <div class="table-card">
+                <div class="table-header">
+                    <h3>Recent Detections</h3>
+                </div>
+                <table class="custom-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Plate</th>
+                            <th>Time</th>
+                            <th>Camera</th>
+                            <th>Confidence</th>
+                            <th>Status</th>
+                            <th>Owner</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recentDetectionsBody">
+                        <!-- Filled by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
-    <button onclick="window.location.href='vehicle-register.html'">
-    Register Vehicle
-</button>
-<button onclick="window.location.href='vehicles.html'">
-    View Vehicles
-</button>
+        <!-- 2. LIVE CAPTURE TAB -->
+        <div id="tab-capture" class="tab-section">
+            <div class="capture-layout">
+                <div>
+                    <div class="video-feed-container">
+                        <div class="video-overlay-reticle"></div>
+                        <!-- Placeholder camera or webcam elements -->
+                        <video id="webcamFeed" class="video-feed" autoplay playsinline muted></video>
+                        <canvas id="snapshotCanvas" style="display: none;"></canvas>
+                    </div>
+                    <div class="capture-controls">
+                        <button onclick="startCamera()" class="btn-primary" style="width: auto;">Start Live Camera</button>
+                        <button onclick="stopCamera()" class="btn-secondary" style="width: auto;">Stop Camera</button>
+                        <button onclick="scanCurrentFrame()" class="btn-secondary" style="width: auto; background-color: var(--accent-color); color: white; border-color: var(--accent-color);">Capture & Scan Frame</button>
+                    </div>
 
-    <button>
-        Upload Image
-    </button>
+                    <!-- Manual Plate Verification (AI Bypass) -->
+                    <div class="manual-check-card" style="margin-top: 20px; padding: 20px; border: 1px solid var(--border-color); border-radius: 8px; background: white;">
+                        <h3 style="margin-top: 0; margin-bottom: 8px; font-size: 15px; font-weight: 700;">Manual Plate Verification (Bypass AI)</h3>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+                            Verify if a plate number is in the database and simulate a log record.
+                        </p>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="manualPlateInput" class="form-input" placeholder="ENTER PLATE NUMBER" style="text-transform: uppercase; margin-bottom: 0; flex: 1; height: 38px; font-weight: bold; letter-spacing: 1px;">
+                            <button onclick="performManualCheck()" class="btn-primary" style="width: auto; margin-top: 0; height: 38px; padding: 0 16px; font-size: 13px;">Check Database</button>
+                        </div>
+                        <div id="manualCheckResult" style="margin-top: 15px; display: none;"></div>
+                    </div>
+                </div>
+                <div>
+                    <div class="camera-logs-container">
+                        <h3 style="font-size: 15px; font-weight: 700; margin-bottom: 15px;">Live Camera Scan Log</h3>
+                        <div id="liveCameraLogBody">
+                            <!-- Populated dynamically -->
+                            <div style="text-align: center; color: var(--text-muted); padding: 30px;">
+                                Camera feed offline. Start camera to stream scans.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-    <button>
-        Detection History
-    </button>
+        <!-- 3. RECORDS / DETECTION LOGS TAB -->
+        <div id="tab-records" class="tab-section">
+            <div class="table-card">
+                <!-- Filters and Actions Bar -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap: 15px;">
+                    <div style="display: flex; gap: 8px;">
+                        <button onclick="filterRecords('all')" class="btn-secondary filter-btn active" style="width: auto; padding: 6px 16px; border-radius: 20px; font-weight: 600; font-size: 13px; background-color: var(--accent-color); color: white; border-color: var(--accent-color);" id="filter-all">All</button>
+                        <button onclick="filterRecords('allowed')" class="btn-secondary filter-btn" style="width: auto; padding: 6px 16px; border-radius: 20px; font-weight: 600; font-size: 13px;" id="filter-allowed">Allowed</button>
+                        <button onclick="filterRecords('flagged')" class="btn-secondary filter-btn" style="width: auto; padding: 6px 16px; border-radius: 20px; font-weight: 600; font-size: 13px;" id="filter-flagged">Flagged</button>
+                        <button onclick="filterRecords('denied')" class="btn-secondary filter-btn" style="width: auto; padding: 6px 16px; border-radius: 20px; font-weight: 600; font-size: 13px;" id="filter-denied">Denied</button>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button onclick="exportCSV()" class="btn-secondary" style="width: auto; padding: 8px 16px; font-size: 13px; display: flex; align-items: center; gap: 6px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Export CSV
+                        </button>
+                        <button onclick="openVehiclesManagerModal()" class="btn-secondary" style="width: auto; padding: 8px 16px; font-size: 13px; background-color: var(--accent-color); color: white; border-color: var(--accent-color); display: flex; align-items: center; gap: 6px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg> Manage Vehicles
+                        </button>
+                        <button onclick="clearAllLogs()" class="btn-secondary" style="width: auto; padding: 8px 16px; font-size: 13px; background-color: var(--danger-color); color: white; border-color: var(--danger-color); display: flex; align-items: center; gap: 6px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Clear All Logs
+                        </button>
+                    </div>
+                </div>
 
+                <!-- Table -->
+                <table class="custom-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Plate</th>
+                            <th>Time</th>
+                            <th>Camera</th>
+                            <th>Vehicle</th>
+                            <th>Confidence</th>
+                            <th>Status</th>
+                            <th>Owner</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recordsTableBody">
+                        <!-- Filled by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 4. SECURITY ALERTS TAB -->
+        <div id="tab-alerts" class="tab-section">
+            <div class="table-card">
+                <div class="table-header">
+                    <h3>Active Security Alerts</h3>
+                </div>
+                <table class="custom-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Plate Number</th>
+                            <th>Alert Time</th>
+                            <th>Reason</th>
+                            <th>Image Reference</th>
+                        </tr>
+                    </thead>
+                    <tbody id="alertsTableBody">
+                        <!-- Filled by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 5. SETTINGS TAB -->
+        <div id="tab-settings" class="tab-section">
+            <div class="table-card" style="max-width: 500px;">
+                <div class="table-header" style="margin-bottom: 20px;">
+                    <h3>Operator Settings</h3>
+                </div>
+                <div class="form-group">
+                    <label>Operator Name</label>
+                    <input type="text" id="settingOperatorName" class="form-input" readonly value="Admin">
+                </div>
+                <div class="form-group">
+                    <label>Target Server API URL</label>
+                    <input type="text" id="settingApiUrl" class="form-input" readonly value="http://127.0.0.1:8000">
+                </div>
+                <div class="form-group">
+                    <label>Camera 01 Location</label>
+                    <input type="text" class="form-input" readonly value="Cam-01 North Gate">
+                </div>
+                <p style="font-size: 13px; color: var(--text-muted);">
+                    System parameters managed by system administrator. Contact security supervisor to alter API configurations.
+                </p>
+            </div>
+        </div>
+    </div>
 </div>
 
+<!-- ================= MODALS ================= -->
+
+<!-- A. EDIT VEHICLE MODAL -->
+<div id="editModal" class="modal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeEditModal()">&times;</span>
+        <h2>Edit Vehicle</h2>
+        
+        <input type="hidden" id="editId">
+        
+        <div class="form-group">
+            <label for="editOwnerName">Owner Name</label>
+            <input type="text" id="editOwnerName" class="form-input" placeholder="Owner Name">
+        </div>
+        
+        <div class="form-group">
+            <label for="editOwnerId">Owner ID</label>
+            <input type="text" id="editOwnerId" class="form-input" placeholder="Owner ID">
+        </div>
+        
+        <div class="form-group">
+            <label for="editVehicleModel">Vehicle Model</label>
+            <input type="text" id="editVehicleModel" class="form-input" placeholder="Vehicle Model">
+        </div>
+
+        <div class="form-group">
+            <label>Vehicle Photo</label>
+            <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                <button type="button" onclick="startEditCamera()" class="btn-secondary" style="font-size: 12px; padding: 6px 12px; width: auto;" id="btnEditStartCam">📷 Open Camera</button>
+                <button type="button" onclick="captureEditSnapshot()" class="btn-secondary" style="font-size: 12px; padding: 6px 12px; width: auto; display: none; background-color: var(--accent-color); color: white;" id="btnEditSnap">📸 Take Snap</button>
+                <button type="button" onclick="stopEditCamera()" class="btn-secondary" style="font-size: 12px; padding: 6px 12px; width: auto; display: none;" id="btnEditStopCam">❌ Cancel</button>
+            </div>
+            
+            <!-- Video feed preview -->
+            <div id="editVideoContainer" style="display: none; width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden; position: relative; margin-bottom: 10px; border: 1px solid var(--border-color);">
+                <video id="editWebcam" style="width: 100%; height: 100%; object-fit: cover;" autoplay playsinline></video>
+            </div>
+            
+            <!-- Snap preview -->
+            <div id="editSnapPreviewContainer" style="display: none; width: 100%; aspect-ratio: 16/9; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); position: relative; margin-bottom: 10px;">
+                <img id="editSnapPreview" style="width: 100%; height: 100%; object-fit: cover;">
+            </div>
+            
+            <canvas id="editSnapCanvas" style="display: none;"></canvas>
+            <input type="hidden" id="editVehicleImage">
+        </div>
+        
+        <button onclick="updateVehicle()" class="btn-primary" style="margin-top: 10px;">
+            Update Vehicle
+        </button>
+    </div>
+</div>
+
+<!-- B. REGISTER VEHICLE MODAL -->
+<div id="registerModal" class="modal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeRegisterModal()">&times;</span>
+        <h2>Add New Vehicle</h2>
+        
+        <div class="form-group">
+            <label for="regPlateNumber">Plate Number</label>
+            <input type="text" id="regPlateNumber" class="form-input" placeholder="e.g. CAB1234" style="text-transform: uppercase;">
+        </div>
+
+        <div class="form-group">
+            <label for="regOwnerName">Owner Name</label>
+            <input type="text" id="regOwnerName" class="form-input" placeholder="Owner Full Name">
+        </div>
+        
+        <div class="form-group">
+            <label for="regOwnerId">Owner ID / License ID</label>
+            <input type="text" id="regOwnerId" class="form-input" placeholder="Owner ID">
+        </div>
+        
+        <div class="form-group">
+            <label for="regVehicleModel">Vehicle Model</label>
+            <input type="text" id="regVehicleModel" class="form-input" placeholder="e.g. bently">
+        </div>
+
+        <div class="form-group">
+            <label>Vehicle Photo</label>
+            <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                <button type="button" onclick="startRegCamera()" class="btn-secondary" style="font-size: 12px; padding: 6px 12px; width: auto;" id="btnRegStartCam">📷 Open Camera</button>
+                <button type="button" onclick="captureRegSnapshot()" class="btn-secondary" style="font-size: 12px; padding: 6px 12px; width: auto; display: none; background-color: var(--accent-color); color: white;" id="btnRegSnap">📸 Take Snap</button>
+                <button type="button" onclick="stopRegCamera()" class="btn-secondary" style="font-size: 12px; padding: 6px 12px; width: auto; display: none;" id="btnRegStopCam">❌ Cancel</button>
+            </div>
+            
+            <!-- Video feed preview -->
+            <div id="regVideoContainer" style="display: none; width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden; position: relative; margin-bottom: 10px; border: 1px solid var(--border-color);">
+                <video id="regWebcam" style="width: 100%; height: 100%; object-fit: cover;" autoplay playsinline></video>
+            </div>
+            
+            <!-- Snap preview -->
+            <div id="regSnapPreviewContainer" style="display: none; width: 100%; aspect-ratio: 16/9; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); position: relative; margin-bottom: 10px;">
+                <img id="regSnapPreview" style="width: 100%; height: 100%; object-fit: cover;">
+            </div>
+            
+            <canvas id="regSnapCanvas" style="display: none;"></canvas>
+            <input type="hidden" id="regVehicleImage">
+        </div>
+        
+        <button onclick="registerNewVehicle()" class="btn-primary" style="margin-top: 10px;">
+            Save Vehicle Registration
+        </button>
+    </div>
+</div>
+
+<!-- C. VEHICLES REGISTRY MANAGER MODAL -->
+<div id="vehiclesManagerModal" class="modal">
+    <div class="modal-content" style="width: 800px; max-width: 90vw;">
+        <span class="close-btn" onclick="closeVehiclesManagerModal()">&times;</span>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <h2>Registered Vehicles Registry</h2>
+            <button onclick="openRegisterModal()" class="btn-secondary" style="width: auto; padding: 6px 12px; background-color: var(--accent-color); color: white; border-color: var(--accent-color);">
+                ➕ Add New Vehicle
+            </button>
+        </div>
+        
+        <div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px;">
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Photo</th>
+                        <th>Plate Number</th>
+                        <th>Owner Name</th>
+                        <th>Owner ID</th>
+                        <th>Vehicle Model</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="vehiclesTableBody">
+                    <!-- Filled by JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="api.js"></script>
 <script src="dashboard.js"></script>
 
 </body>
-
 </html>

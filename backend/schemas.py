@@ -33,3 +33,8 @@ class UserLogin(BaseModel):
     password: str
 
 
+class PlateCheckRequest(BaseModel):
+    plate_number: str
+
+
+

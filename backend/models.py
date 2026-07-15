@@ -24,4 +24,29 @@ class User(Base):
     username = Column(String(50), unique=True, nullable=False )
     password = Column(String(255), nullable=False)
     role = Column(String(20), nullable=False)
-   
+
+
+class DetectionLog(Base):
+    __tablename__ = "detection_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    plate_number = Column(String(20), nullable=False)
+    snapshot = Column(String(255))
+    detection_time = Column(
+        TIMESTAMP,
+        server_default=text("CURRENT_TIMESTAMP")
+    )
+    status = Column(String(20), nullable=False)
+
+
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    plate_number = Column(String(20))
+    snapshot = Column(String(255))
+    alert_time = Column(
+        TIMESTAMP,
+        server_default=text("CURRENT_TIMESTAMP")
+    )
+    reason = Column(String(255))

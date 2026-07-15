@@ -1,6 +1,7 @@
 async function registerVehicle() {
 
     const token = localStorage.getItem("token");
+    console.log("Token:", token);
 
     if (!token) {
         window.location.href = "index.html";

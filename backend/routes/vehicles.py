@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from schemas import VehicleCreate, VehicleUpdate
 from models import Vehicle, User
@@ -35,7 +36,7 @@ def register_vehicle(
 ):
 
     new_vehicle = Vehicle(
-        plate_number=vehicle.plate_number,
+        plate_number=vehicle.plate_number.strip().upper(),
         owner_name=vehicle.owner_name,
         owner_id=vehicle.owner_id,
         vehicle_model=vehicle.vehicle_model,
@@ -67,14 +68,14 @@ def get_vehicles(
 
 
 # Search vehicle by plate number (No login required)
-@router.get("/vehicles/{plate_number}")
+@router.get("/vehicles/plate/{plate_number}")
 def get_vehicle_by_plate(
     plate_number: str,
     db: Session = Depends(get_db)
 ):
 
     vehicle = db.query(Vehicle).filter(
-        Vehicle.plate_number == plate_number
+        func.upper(Vehicle.plate_number) == func.upper(plate_number.strip())
     ).first()
 
 
@@ -169,7 +170,7 @@ def delete_vehicle(
         "vehicle_id": vehicle_id,
         "deleted_by": current_user.username
     }
-@router.get("/vehicles/{vehicle_id}")
+@router.get("/vehicles/{vehicle_id:int}")
 def get_vehicle(vehicle_id:int, db:Session=Depends(get_db)):
 
     vehicle = db.query(Vehicle).filter(
@@ -177,8 +178,9 @@ def get_vehicle(vehicle_id:int, db:Session=Depends(get_db)):
     ).first()
 
     if not vehicle:
-        return {
-            "message":"Vehicle not found"
-        }
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vehicle not found"
+        )
 
     return vehicle

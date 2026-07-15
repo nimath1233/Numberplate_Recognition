@@ -3,51 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Register - ANPR System</title>
-
+    <title>PlateVision ALPR System - Register</title>
     <link rel="stylesheet" href="style.css">
 </head>
+<body class="auth-body">
 
-<body>
+<div class="auth-card">
+    <div class="auth-logo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+    </div>
+    <h1>PlateVision</h1>
+    <p class="subtitle">Automatic License Plate Recognition</p>
+    
+    <h2>Create Operator Account</h2>
+    
+    <div class="form-group" style="text-align: left;">
+        <label for="username">Username</label>
+        <input type="text" id="username" class="form-input" placeholder="Create username">
+    </div>
 
-<div class="container">
+    <div class="form-group" style="text-align: left;">
+        <label for="password">Password</label>
+        <input type="password" id="password" class="form-input" placeholder="••••••••">
+    </div>
 
-    <h1>ANPR System</h1>
+    <div class="form-group" style="text-align: left;">
+        <label for="role">Assign Role</label>
+        <select id="role">
+            <option value="admin">Admin</option>
+            <option value="security">Security Officer</option>
+        </select>
+    </div>
 
-    <h2>Create Account</h2>
-
-    <input
-        type="text"
-        id="username"
-        placeholder="Username"
-    >
-
-    <input
-        type="password"
-        id="password"
-        placeholder="Password"
-    >
-
-    <select id="role">
-
-        <option value="admin">Admin</option>
-
-        <option value="security">Security Officer</option>
-
-    </select>
-
-    <button onclick="registerUser()">
-        Register
+    <button onclick="registerUser()" class="btn-primary" style="margin-top: 10px;">
+        Register Operator
     </button>
 
-    <p id="message"></p>
-
-    <br>
-
-    <a href="index.html">
+    <p id="message" style="margin-top: 15px; font-weight: 600; font-size: 13px;"></p>
+    
+    <a href="index.html" class="auth-link">
         Already have an account? Login
     </a>
-
 </div>
 
 <script src="api.js"></script>
