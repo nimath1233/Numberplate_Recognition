@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register Vehicle - SentryPlate ANPR</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app-layout">
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div>
+            <div class="brand-section">
+                <div class="brand-logo">SP</div>
+                <div class="brand-name">SentryPlate</div>
+            </div>
+            
+            <ul class="menu-list">
+                <li class="menu-item">
+                    <a href="dashboard.html">
+                        <span>📊</span> Dashboard
+                    </a>
+                </li>
+                <li class="menu-item">
+                    <a href="vehicles.html">
+                        <span>🚗</span> Vehicles DB
+                    </a>
+                </li>
+                <li class="menu-item active">
+                    <a href="vehicle-register.html">
+                        <span>📝</span> Register Vehicle
+                    </a>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="sidebar-footer">
+            <div class="user-profile">
+                <div class="user-avatar" id="sidebarAvatar">A</div>
+                <div class="user-info">
+                    <span class="user-name" id="sidebarUser">Admin</span>
+                    <span class="user-role">Authorized Operator</span>
+                </div>
+            </div>
+            <button onclick="logout()" class="btn-secondary" style="width: 100%;">
+                🚪 Logout
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="main-content">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-title">
+                <h2>Register Vehicle</h2>
+            </div>
+            <div class="header-actions">
+                <div class="system-time" id="systemTime">09:30 AM</div>
+            </div>
+        </div>
+
+        <!-- Viewport -->
+        <div class="dashboard-viewport" style="max-width: 600px; margin: 0 auto; width: 100%;">
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">📝 Add New Vehicle to Database</div>
+                </div>
+                
+                <div class="panel-body">
+                    <div class="form-group">
+                        <label for="plate_number">Plate Number</label>
+                        <input
+                            type="text"
+                            id="plate_number"
+                            placeholder="(letters and numbers only)"
+                            style="text-transform: uppercase;"
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="owner_name">Owner Full Name</label>
+                        <input
+                            type="text"
+                            id="owner_name"
+                            placeholder=""
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="owner_id">Owner ID / License ID</label>
+                        <input
+                            type="text"
+                            id="owner_id"
+                            placeholder=""
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="vehicle_model">Vehicle Model</label>
+                        <input
+                            type="text"
+                            id="vehicle_model"
+                            placeholder="(Optional)"
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="vehicle_image">Vehicle Image URL (Optional)</label>
+                        <input
+                            type="text"
+                            id="vehicle_image"
+                            placeholder="e.g. http://example.com/image.jpg"
+                        >
+                    </div>
+
+                    <button onclick="registerVehicle()" class="btn-primary">
+                        💾 Save Vehicle Registration
+                    </button>
+
+                    <p id="message"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="api.js"></script>
+<script src="vehicle-register.js"></script>
+<script>
+    // Header Time
+    function updateTime() {
+        const now = new Date();
+        document.getElementById('systemTime').innerText = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+    updateTime();
+    setInterval(updateTime, 1000);
+
+    // Sidebar Profile
+    const username = localStorage.getItem("username") || "Admin";
+    document.getElementById("sidebarUser").innerText = username;
+    document.getElementById("sidebarAvatar").innerText = username.charAt(0).toUpperCase();
+
+    function logout() {
+        localStorage.removeItem("token");
+        localStorage.removeItem("username");
+        window.location.href = "index.html";
+    }
+</script>
+</body>
+</html>

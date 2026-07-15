@@ -169,3 +169,16 @@ def delete_vehicle(
         "vehicle_id": vehicle_id,
         "deleted_by": current_user.username
     }
+@router.get("/vehicles/{vehicle_id}")
+def get_vehicle(vehicle_id:int, db:Session=Depends(get_db)):
+
+    vehicle = db.query(Vehicle).filter(
+        Vehicle.id == vehicle_id
+    ).first()
+
+    if not vehicle:
+        return {
+            "message":"Vehicle not found"
+        }
+
+    return vehicle

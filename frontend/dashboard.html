@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <title>Dashboard</title>
+
+    <link rel="stylesheet" href="style.css">
+
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>ANPR Dashboard</h1>
+
+    <h3 id="welcome"></h3>
+
+    <button onclick="logout()">
+        Logout
+    </button>
+    
+
+    <hr>
+
+    <h2>System Modules</h2>
+
+    <button onclick="window.location.href='vehicle-register.html'">
+    Register Vehicle
+</button>
+<button onclick="window.location.href='vehicles.html'">
+    View Vehicles
+</button>
+
+    <button>
+        Upload Image
+    </button>
+
+    <button>
+        Detection History
+    </button>
+
+</div>
+
+<script src="dashboard.js"></script>
+
+</body>
+
+</html>

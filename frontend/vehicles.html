@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>All Vehicles</title>
+
+    <link rel="stylesheet" href="style.css">
+
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>Registered Vehicles</h1>
+    <hr>
+
+<h2>Edit Vehicle</h2>
+
+<input type="hidden" id="editId">
+
+<input
+    type="text"
+    id="editOwnerName"
+    placeholder="Owner Name"
+>
+
+<input
+    type="text"
+    id="editOwnerId"
+    placeholder="Owner ID"
+>
+
+<input
+    type="text"
+    id="editVehicleModel"
+    placeholder="Vehicle Model"
+>
+
+<button onclick="updateVehicle()">
+    Update Vehicle
+</button>
+
+<hr>
+
+    <table border="1" width="100%" id="vehicleTable">
+
+        <thead>
+
+          <tr>
+    <th>ID</th>
+    <th>Plate Number</th>
+    <th>Owner</th>
+    <th>Owner ID</th>
+    <th>Model</th>
+    <th>Actions</th>
+</tr>
+
+        </thead>
+
+        <tbody id="vehicleBody">
+
+        </tbody>
+        <h2>Search Vehicle</h2>
+
+<input
+    type="text"
+    id="searchPlate"
+    placeholder="Enter Plate Number"
+>
+
+<button onclick="searchVehicle()">
+    Search
+</button>
+
+<button onclick="loadVehicles()">
+    Show All
+</button>
+
+<br><br>
+
+    </table>
+
+    <br>
+
+    <button onclick="window.location.href='dashboard.html'">
+        Back to Dashboard
+    </button>
+
+</div>
+
+<script src="api.js"></script>
+<script src="vehicles.js"></script>
+
+</body>
+
+</html>
