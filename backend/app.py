@@ -7,6 +7,7 @@ from routes.vehicles import router as vehicle_router
 from routes.auth import router as auth_router
 from routes.detection import router as detection_router
 from routes.alerts import router as alerts_router
+from routes import parking
 
 from database import engine
 from models import Base
@@ -26,8 +27,17 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "null",
         "http://localhost:5500",
-        "http://127.0.0.1:5500"
+        "http://127.0.0.1:5500",
+        "http://localhost:5501",
+        "http://127.0.0.1:5501",
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080"
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -38,7 +48,7 @@ app.include_router(vehicle_router)
 app.include_router(auth_router)
 app.include_router(detection_router)
 app.include_router(alerts_router)
-
+app.include_router(parking.router)
 @app.get("/")
 def home():
     return {"message": "Welcome to ANPR System"}

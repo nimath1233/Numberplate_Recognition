@@ -779,3 +779,113 @@ body {
 .auth-link:hover {
     text-decoration: underline;
 }
+
+/* ================= PARKING LAYOUT STYLES ================= */
+
+.parking-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 24px;
+}
+
+.slot-card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    min-height: 200px;
+}
+
+.slot-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.05);
+    border-color: #cbd5e1;
+}
+
+.slot-card.available {
+    border-left: 5px solid var(--success-color);
+    background-color: var(--success-light);
+}
+
+.slot-card.occupied {
+    border-left: 5px solid var(--danger-color);
+    background-color: var(--danger-light);
+}
+
+.slot-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.slot-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.slot-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.slot-status-badge.available {
+    background-color: var(--success-light);
+    color: #065f46;
+}
+
+.slot-status-badge.available .status-dot-small {
+    background-color: var(--success-color);
+}
+
+.slot-status-badge.occupied {
+    background-color: var(--danger-light);
+    color: #991b1b;
+}
+
+.slot-status-badge.occupied .status-dot-small {
+    background-color: var(--danger-color);
+}
+
+.slot-card-body {
+    flex-grow: 1;
+    margin-bottom: 20px;
+}
+
+.slot-occupant-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.slot-occupant-info.empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.slot-card-actions {
+    margin-top: auto;
+}
+
+.slot-card-actions button {
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.slot-card-actions .release-btn:hover {
+    background-color: var(--danger-color) !important;
+    color: white !important;
+}

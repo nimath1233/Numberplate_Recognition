@@ -7,7 +7,7 @@ import uuid
 
 from database import SessionLocal
 from dependencies import get_current_user
-from models import User, Vehicle, DetectionLog, Alert
+from models import User, Vehicle, DetectionLog, Alert, ParkingSlot, ParkingSession
 from schemas import PlateCheckRequest
 
 
@@ -28,7 +28,7 @@ def get_db():
         db.close()
 
 
-
+    
 UPLOAD_FOLDER = "uploads"
 
 if not os.path.exists(UPLOAD_FOLDER):
@@ -119,6 +119,49 @@ def manual_check(
         db.commit()
         db.refresh(alert_entry)
 
+    # 4. Handle Parking Slot Auto-Assignment if vehicle is found
+    parking_assigned = False
+    parking_slot_name = None
+    parking_message = "No slot assigned (unregistered vehicle)"
+
+    if vehicle:
+        # Check if vehicle is already parked
+        active_session = db.query(ParkingSession).filter(
+            ParkingSession.vehicle_id == vehicle.id,
+            ParkingSession.status == "Active"
+        ).first()
+
+        if active_session:
+            # Find the slot name
+            slot = db.query(ParkingSlot).filter(ParkingSlot.id == active_session.slot_id).first()
+            parking_message = f"Vehicle is already parked in slot {slot.slot_name if slot else 'unknown'}."
+        else:
+            # Check for available parking slot
+            available_slot = db.query(ParkingSlot).filter(
+                ParkingSlot.status == "Available"
+            ).order_by(ParkingSlot.slot_name).first()
+
+            if available_slot:
+                # Create parking session
+                session = ParkingSession(
+                    vehicle_id=vehicle.id,
+                    slot_id=available_slot.id,
+                    status="Active"
+                )
+                db.add(session)
+                
+                # Mark slot as Occupied
+                available_slot.status = "Occupied"
+                
+                db.commit()
+                db.refresh(session)
+                
+                parking_assigned = True
+                parking_slot_name = available_slot.slot_name
+                parking_message = f"Assigned to parking slot {available_slot.slot_name}."
+            else:
+                parking_message = "All parking slots are fully occupied."
+
     return {
         "status": status,
         "found": vehicle is not None,
@@ -131,5 +174,8 @@ def manual_check(
             "vehicle_image": vehicle.vehicle_image
         } if vehicle else None,
         "log_id": log_entry.id,
-        "alert_id": alert_entry.id if alert_entry else None
-    }
+        "alert_id": alert_entry.id if alert_entry else None,
+        "parking_assigned": parking_assigned,
+        "parking_slot": parking_slot_name,
+        "parking_message": parking_message
+    }

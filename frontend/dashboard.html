@@ -27,34 +27,39 @@
             <ul class="menu-list">
                 <li class="menu-item active" id="menu-dashboard">
                     <a onclick="switchTab('dashboard')">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg> Dashboard
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg> <span data-i18n="menu_dashboard">Dashboard</span>
                     </a>
                 </li>
                 <li class="menu-item" id="menu-capture">
                     <a onclick="switchTab('capture')">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Live Capture
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> <span data-i18n="menu_capture">Live Capture</span>
                     </a>
                 </li>
                 <li class="menu-item" id="menu-records">
                     <a onclick="switchTab('records')">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg> Records
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg> <span data-i18n="menu_records">Records</span>
                     </a>
                 </li>
                 <li class="menu-item" id="menu-alerts">
                     <a onclick="switchTab('alerts')">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Alerts <span id="alerts-badge" style="background: #ef4444; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 8px; font-weight: bold; display: none;">0</span>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> <span data-i18n="menu_alerts">Alerts</span> <span id="alerts-badge" style="background: #ef4444; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 8px; font-weight: bold; display: none;">0</span>
+                    </a>
+                </li>
+                <li class="menu-item" id="menu-parking">
+                    <a onclick="switchTab('parking')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg> <span data-i18n="menu_parking">Parking</span>
                     </a>
                 </li>
                 <li class="menu-item" id="menu-settings">
                     <a onclick="switchTab('settings')">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> <span data-i18n="menu_settings">Settings</span>
                     </a>
                 </li>
             </ul>
         </div>
         
         <div class="sidebar-footer">
-            <button onclick="logout()" class="btn-logout">
+            <button onclick="logout()" class="btn-logout" data-i18n="menu_logout">
                 Logout
             </button>
         </div>
@@ -73,6 +78,13 @@
                     <svg class="search-icon-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     <input type="text" placeholder="Search plates..." class="search-input" id="globalSearchInput" oninput="handleGlobalSearch(this.value)">
                 </div>
+                <div style="margin-left: 5px;">
+                    <select id="languageSelector" onchange="setLanguage(this.value)" style="height: 38px; padding: 0 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--card-bg); color: var(--text-main); font-size: 12px; font-weight: bold; cursor: pointer; outline: none; transition: border-color 0.2s;">
+                        <option value="en">🇺🇸 EN</option>
+                        <option value="si">🇱🇰 සිංහල</option>
+                        <option value="ta">🇱🇰 தமிழ்</option>
+                    </select>
+                </div>
                 <div class="user-profile">
                     <div class="user-avatar" id="headerAvatar">A</div>
                 </div>
@@ -87,35 +99,35 @@
             <div class="stats-grid">
                 <div class="stats-card">
                     <div class="stats-info">
-                        <h4>Total Detections</h4>
+                        <h4 data-i18n="total_detections">Total Detections</h4>
                         <div class="value" id="stat-total">0</div>
-                        <div class="trend up">+18% vs yesterday</div>
+                        <div class="trend up" data-i18n="trend_detections">+18% vs yesterday</div>
                     </div>
-                    <div class="stats-icon">🚗</div>
+                    <div class="stats-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg></div>
                 </div>
                 <div class="stats-card">
                     <div class="stats-info">
-                        <h4>Allowed</h4>
+                        <h4 data-i18n="allowed">Allowed</h4>
                         <div class="value" id="stat-allowed">0</div>
                         <div class="trend up" style="color: var(--success-color);" id="stat-pass-rate">0% pass rate</div>
                     </div>
-                    <div class="stats-icon" style="color: var(--success-color); background-color: var(--success-light);">✓</div>
+                    <div class="stats-icon" style="color: var(--success-color); background-color: var(--success-light);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
                 </div>
                 <div class="stats-card">
                     <div class="stats-info">
-                        <h4>Flagged / Denied</h4>
+                        <h4 data-i18n="flagged_denied">Flagged / Denied</h4>
                         <div class="value" id="stat-flagged">0</div>
                         <div class="trend down" style="color: var(--danger-color);" id="stat-flagged-rate">0% review rate</div>
                     </div>
-                    <div class="stats-icon" style="color: var(--danger-color); background-color: var(--danger-light);">⚠</div>
+                    <div class="stats-icon" style="color: var(--danger-color); background-color: var(--danger-light);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
                 </div>
                 <div class="stats-card">
                     <div class="stats-info">
-                        <h4>Avg. Confidence</h4>
+                        <h4 data-i18n="avg_confidence">Avg. Confidence</h4>
                         <div class="value" id="stat-confidence">0%</div>
-                        <div class="trend up">±2.3% deviation</div>
+                        <div class="trend up" data-i18n="trend_deviation">±2.3% deviation</div>
                     </div>
-                    <div class="stats-icon">📈</div>
+                    <div class="stats-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
                 </div>
             </div>
 
@@ -282,6 +294,72 @@
             </div>
         </div>
 
+        <!-- 6. PARKING MANAGEMENT TAB -->
+        <div id="tab-parking" class="tab-section">
+            <!-- Parking Stats Row -->
+            <div class="stats-grid">
+                <div class="stats-card">
+                    <div class="stats-info">
+                        <h4 data-i18n="total_slots">Total Slots</h4>
+                        <div class="value" id="parking-stat-total">0</div>
+                    </div>
+                    <div class="stats-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg></div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-info">
+                        <h4 data-i18n="available_slots">Available Slots</h4>
+                        <div class="value" id="parking-stat-available" style="color: var(--success-color);">0</div>
+                    </div>
+                    <div class="stats-icon" style="color: var(--success-color); background-color: var(--success-light);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-info">
+                        <h4 data-i18n="occupied_slots">Occupied Slots</h4>
+                        <div class="value" id="parking-stat-occupied" style="color: var(--danger-color);">0</div>
+                    </div>
+                    <div class="stats-icon" style="color: var(--danger-color); background-color: var(--danger-light);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg></div>
+                </div>
+            </div>
+
+            <!-- Actions row -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; gap: 15px; flex-wrap: wrap;">
+                <h3 data-i18n="parking_slots_title" style="font-size: 18px; font-weight: 700; color: var(--text-main); margin: 0;">Parking Lots / Slots</h3>
+                <button onclick="initializeParkingSlots()" class="btn-secondary" style="width: auto; padding: 8px 16px; font-size: 13px; background-color: var(--accent-color); color: white; border-color: var(--accent-color); display: flex; align-items: center; gap: 6px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg> <span data-i18n="btn_initialize">Initialize Parking Slots</span>
+                </button>
+            </div>
+
+            <!-- Parking Slot Grid -->
+            <div class="parking-grid" id="parkingSlotsGrid" style="margin-bottom: 30px;">
+                <!-- Slot cards filled by JS -->
+            </div>
+
+            <!-- Parking History Section -->
+            <div class="table-card">
+                <div class="table-header">
+                    <h3 data-i18n="history_title">Parking History & Session Logs</h3>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table class="custom-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="th_session_id">Session ID</th>
+                                <th data-i18n="th_vehicle_plate">Vehicle Plate</th>
+                                <th data-i18n="th_slot_number">Slot Number</th>
+                                <th data-i18n="th_entry_time">Entry Time</th>
+                                <th data-i18n="th_exit_time">Exit Time</th>
+                                <th data-i18n="th_status">Status</th>
+                                <th data-i18n="th_action">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="parkingHistoryTableBody">
+                            <!-- Filled by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <!-- 5. SETTINGS TAB -->
         <div id="tab-settings" class="tab-section">
             <div class="table-card" style="max-width: 500px;">
@@ -443,6 +521,37 @@
                     <!-- Filled by JS -->
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<!-- D. ASSIGN PARKING SLOT MODAL -->
+<div id="assignModal" class="modal">
+    <div class="modal-content" style="max-width: 450px;">
+        <span class="close-btn" onclick="closeAssignModal()">&times;</span>
+        <h2>Assign Vehicle to Slot</h2>
+        
+        <input type="hidden" id="assignSlotId">
+        
+        <div class="form-group" style="margin-top: 20px;">
+            <label>Selected Parking Slot</label>
+            <input type="text" id="assignSlotName" class="form-input" readonly style="background-color: var(--accent-light); font-weight: bold;">
+        </div>
+        
+        <div class="form-group">
+            <label for="assignVehicleSelect">Select Registered Vehicle</label>
+            <select id="assignVehicleSelect" class="form-input" style="width: 100%; height: 42px; background: white; border: 1px solid var(--border-color); border-radius: 8px; padding: 0 10px;">
+                <!-- Populated by JS -->
+            </select>
+        </div>
+        
+        <div style="display: flex; gap: 10px; margin-top: 24px;">
+            <button onclick="assignParkingSlot()" class="btn-primary" style="margin-top: 0;">
+                Assign Vehicle
+            </button>
+            <button onclick="closeAssignModal()" class="btn-secondary" style="margin-top: 0; width: auto; padding: 0 16px;">
+                Cancel
+            </button>
         </div>
     </div>
 </div>

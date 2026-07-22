@@ -46,3 +46,15 @@ if (data.access_token) {
         document.getElementById("message").innerHTML = "❌ Login failed";
     }
 }
+
+// Check for expired session query parameter and display message
+document.addEventListener("DOMContentLoaded", () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("expired") === "true") {
+        const messageEl = document.getElementById("message");
+        if (messageEl) {
+            messageEl.style.color = "var(--danger-color, #ef4444)";
+            messageEl.innerHTML = "⚠️ Session expired. Please log in again.";
+        }
+    }
+});

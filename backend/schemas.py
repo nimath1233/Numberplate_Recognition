@@ -37,4 +37,20 @@ class PlateCheckRequest(BaseModel):
     plate_number: str
 
 
+class ParkingSlotCreate(BaseModel):
+    slot_number: str
+
+
+class ParkingAssign(BaseModel):
+    vehicle_id: int | None = None
+    slot_id: int | None = None
+    plate_number: str | None = None
+    slot_name: str | None = None
+
+class ParkingRelease(BaseModel):
+    session_id: int | None = None
+    plate_number: str | None = None
+    slot_name: str | None = None
+
+
 
