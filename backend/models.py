@@ -1,5 +1,5 @@
-from sqlalchemy.orm import declarative_base
-from sqlalchemy import Column, Integer, String, TIMESTAMP, text, ForeignKey
+from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy import Column, Integer, String, TIMESTAMP, text, ForeignKey, Boolean
 
 Base = declarative_base()
 
@@ -12,11 +12,71 @@ class Vehicle(Base):
     owner_name = Column(String(100), nullable=False)
     owner_id = Column(String(50), nullable=False)
     vehicle_model = Column(String(100))
+    category = Column(String(20), default="Car")
+    is_guest = Column(Boolean, default=False)
     vehicle_image = Column(String(255))
     registered_date = Column(
         TIMESTAMP,
         server_default=text("CURRENT_TIMESTAMP")
     )
+
+    @property
+    def category_info(self):
+        return VehicleCategoryFactory.get(self.category).to_dict()
+
+
+# Polymorphic Vehicle Category Domain Hierarchy (OOP)
+class BaseVehicleCategory:
+    name = "Base"
+    glb_model = "car.glb"
+    icon = "🚗"
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "glb_model": self.glb_model,
+            "icon": self.icon
+        }
+
+class CarCategory(BaseVehicleCategory):
+    name = "Car"
+    glb_model = "car.glb"
+    icon = "🚗"
+
+class BikeCategory(BaseVehicleCategory):
+    name = "Bike"
+    glb_model = "bike.glb"
+    icon = "🏍️"
+
+class VanCategory(BaseVehicleCategory):
+    name = "Van"
+    glb_model = "van.glb"
+    icon = "🚐"
+
+class BusCategory(BaseVehicleCategory):
+    name = "Bus"
+    glb_model = "bus.glb"
+    icon = "🚌"
+
+class TruckCategory(BaseVehicleCategory):
+    name = "Truck"
+    glb_model = "truck.glb"
+    icon = "🚚"
+
+class VehicleCategoryFactory:
+    _registry = {
+        "car": CarCategory,
+        "bike": BikeCategory,
+        "van": VanCategory,
+        "bus": BusCategory,
+        "truck": TruckCategory,
+    }
+
+    @classmethod
+    def get(cls, category_name: str) -> BaseVehicleCategory:
+        key = (category_name or "car").strip().lower()
+        cat_cls = cls._registry.get(key, CarCategory)
+        return cat_cls()
 class User(Base):
     __tablename__ = "users"
 
@@ -87,3 +147,29 @@ class ParkingSession(Base):
         String(20),
         default="Active"
     )
+
+
+class EntranceRecord(Base):
+    __tablename__ = "entrance_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    plate_number = Column(String(20), nullable=False)
+    vehicle_id = Column(
+        Integer,
+        ForeignKey("vehicles.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    snapshot = Column(String(255))
+    parking_slot = Column(String(50))
+    status = Column(
+        String(20),
+        nullable=False,
+        server_default=text("'Approved'")
+    )
+    entrance_time = Column(
+        TIMESTAMP,
+        server_default=text("CURRENT_TIMESTAMP")
+    )
+    exit_time = Column(TIMESTAMP, nullable=True)
+
+    vehicle = relationship("Vehicle")

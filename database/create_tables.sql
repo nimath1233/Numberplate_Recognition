@@ -34,3 +34,14 @@ CREATE TABLE alerts (
     alert_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     reason VARCHAR(255)
 );
+
+-- Entrance Records Table
+CREATE TABLE entrance_records (
+    id SERIAL PRIMARY KEY,
+    plate_number VARCHAR(20) NOT NULL,
+    vehicle_id INT REFERENCES vehicles(id) ON DELETE SET NULL,
+    snapshot VARCHAR(255),
+    parking_slot VARCHAR(50),
+    status VARCHAR(20) NOT NULL DEFAULT 'Approved',
+    entrance_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

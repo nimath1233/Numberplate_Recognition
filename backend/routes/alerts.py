@@ -51,13 +51,12 @@ def get_stats(db: Session = Depends(get_db)):
     
     total = db.query(DetectionLog).count()
     allowed = db.query(DetectionLog).filter(DetectionLog.status == "Allowed").count()
-    flagged = db.query(DetectionLog).filter(DetectionLog.status == "Flagged").count()
+    flagged = db.query(Alert).count()
     
     pass_rate = round((allowed / total * 100), 1) if total > 0 else 100
     flagged_rate = round((flagged / total * 100), 1) if total > 0 else 0
     
     # Calculate mock hourly volume
-    # We want counts for hours 08:00 to 15:00
     hourly_labels = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00"]
     hourly_counts = [0] * len(hourly_labels)
     
@@ -69,11 +68,9 @@ def get_stats(db: Session = Depends(get_db)):
             if 0 <= idx < len(hourly_counts):
                 hourly_counts[idx] += 1
                 
-    # Calculate detections by camera
     cameras = ["Cam-01 North Gate", "Cam-02 South Gate", "Cam-03 East Parking", "Cam-04 West Entrance"]
     camera_counts = [0] * len(cameras)
     
-    # We can distribute randomly based on log count to make it realistic
     for i in range(total):
         idx = i % len(cameras)
         camera_counts[idx] += 1
@@ -121,4 +118,34 @@ def clear_all_logs(
     db.query(Alert).delete()
     db.commit()
     return {"message": "All detection logs and alerts cleared successfully"}
+
+
+@router.delete("/alerts/{alert_id}")
+def delete_alert(
+    alert_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    if not alert:
+        return {"message": "Alert not found"}
+
+    if alert.plate_number:
+        db.query(DetectionLog).filter(DetectionLog.plate_number == alert.plate_number, DetectionLog.status == "Flagged").delete(synchronize_session=False)
+
+    db.delete(alert)
+    db.commit()
+    return {"message": "Alert deleted successfully", "id": alert_id}
+
+
+@router.delete("/alerts")
+def clear_all_alerts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    db.query(Alert).delete()
+    db.query(DetectionLog).filter(DetectionLog.status == "Flagged").delete(synchronize_session=False)
+    db.commit()
+    return {"message": "All security alerts cleared successfully"}
+
 

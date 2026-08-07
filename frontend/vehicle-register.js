@@ -12,6 +12,7 @@ async function registerVehicle() {
     const owner_name = document.getElementById("owner_name").value;
     const owner_id = document.getElementById("owner_id").value;
     const vehicle_model = document.getElementById("vehicle_model").value;
+    const category = document.getElementById("category").value;
     const vehicle_image = document.getElementById("vehicle_image").value;
 
     try {
@@ -31,6 +32,7 @@ async function registerVehicle() {
                     owner_name,
                     owner_id,
                     vehicle_model,
+                    category,
                     vehicle_image
                 })
 

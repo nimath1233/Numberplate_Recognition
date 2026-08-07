@@ -7,8 +7,9 @@ import uuid
 
 from database import SessionLocal
 from dependencies import get_current_user
-from models import User, Vehicle, DetectionLog, Alert, ParkingSlot, ParkingSession
+from models import User, Vehicle, DetectionLog, Alert, ParkingSlot, ParkingSession, EntranceRecord
 from schemas import PlateCheckRequest
+from datetime import datetime
 
 
 
@@ -162,6 +163,18 @@ def manual_check(
             else:
                 parking_message = "All parking slots are fully occupied."
 
+        # 5. Log Entrance Record
+        entrance_record = EntranceRecord(
+            plate_number=vehicle.plate_number,
+            vehicle_id=vehicle.id,
+            snapshot=vehicle.vehicle_image,
+            parking_slot=parking_slot_name,
+            status="Approved",
+            entrance_time=datetime.utcnow()
+        )
+        db.add(entrance_record)
+        db.commit()
+
     return {
         "status": status,
         "found": vehicle is not None,
@@ -171,6 +184,7 @@ def manual_check(
             "owner_name": vehicle.owner_name,
             "owner_id": vehicle.owner_id,
             "vehicle_model": vehicle.vehicle_model,
+            "category": getattr(vehicle, "category", "Car") or "Car",
             "vehicle_image": vehicle.vehicle_image
         } if vehicle else None,
         "log_id": log_entry.id,

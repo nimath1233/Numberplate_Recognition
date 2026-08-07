@@ -40,6 +40,7 @@ def register_vehicle(
         owner_name=vehicle.owner_name,
         owner_id=vehicle.owner_id,
         vehicle_model=vehicle.vehicle_model,
+        category=vehicle.category or "Car",
         vehicle_image=vehicle.vehicle_image
     )
 
@@ -121,6 +122,9 @@ def update_vehicle(
 
     if vehicle.vehicle_model is not None:
         existing_vehicle.vehicle_model = vehicle.vehicle_model
+
+    if vehicle.category is not None:
+        existing_vehicle.category = vehicle.category
 
 
     if vehicle.vehicle_image is not None:
