@@ -24,21 +24,20 @@ async function login() {
         const data = await response.json();
 
         console.log("Response:", data);
-if (data.access_token) {
-
-    localStorage.setItem(
-        "token",
-        data.access_token
-    );
-
-    document.getElementById("message").innerHTML =
-        "✅ Login Successful";
-
-    setTimeout(() => {
-        window.location.href = "dashboard.html";
-    }, 1000);
-
-}
+        if (response.ok && data.access_token) {
+            localStorage.setItem("token", data.access_token);
+            localStorage.setItem("username", data.username || username);
+            localStorage.setItem("role", data.role || "user");
+            document.getElementById("message").style.color = "var(--success-color, #10b981)";
+            document.getElementById("message").innerHTML = "✅ Login Successful";
+            setTimeout(() => {
+                window.location.href = "dashboard.html";
+            }, 500);
+        } else {
+            const errMsg = data.detail || data.message || "Invalid username or password";
+            document.getElementById("message").style.color = "var(--danger-color, #ef4444)";
+            document.getElementById("message").innerHTML = "❌ " + errMsg;
+        }
     }
 
     catch (error) {

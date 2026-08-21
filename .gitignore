@@ -49,8 +49,32 @@ cover/
 # Environments
 .env
 .venv
-env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Large Model Weights & Checkpoints (>100MB / binary artifacts)
+*.pdopt
+*.pdparams
+*.pdiparams
+*.pt
+*.onnx
+*.blob
+backend/ai/best_accuracy/
+backend/ai/cache/
+backend/ai/inference/
+backend/ai/optimized_cpu_int8/
+backend/ai/static_model/
+
+# Uploads & Temp Data
+uploads/
+backend/uploads/
+scratch/
+kernel.errors.txt
+*.log
+*.db
+*.sqlite*
+backend/ai/*debug*.png
+
+

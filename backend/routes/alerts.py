@@ -5,17 +5,10 @@ from datetime import datetime, timedelta
 import random
 
 from models import DetectionLog, Alert, Vehicle, User
-from database import SessionLocal
+from database import get_db
 from dependencies import get_current_user
 
 router = APIRouter(tags=["Alerts & Stats"])
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 # Seeding function removed (Clean environment)
 
@@ -43,7 +36,16 @@ def get_logs(db: Session = Depends(get_db)):
 @router.get("/alerts")
 def get_alerts(db: Session = Depends(get_db)):
     alerts = db.query(Alert).order_by(Alert.alert_time.desc()).all()
-    return alerts
+    results = []
+    for a in alerts:
+        results.append({
+            "id": a.id,
+            "plate_number": a.plate_number,
+            "snapshot": a.snapshot,
+            "reason": a.reason,
+            "alert_time": a.alert_time.isoformat() if a.alert_time else None
+        })
+    return results
 
 
 @router.get("/detection/stats")

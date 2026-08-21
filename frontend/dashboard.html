@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NPRS System - Dashboard</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='20' font-size='20'>🚗</text></svg>">
     <!-- Chart.js CDN for interactive data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Three.js CDN for 3D vehicle slot rendering -->
@@ -31,40 +32,41 @@
             
             <ul class="menu-list">
                 <li class="menu-item active" id="menu-dashboard">
-                    <a onclick="switchTab('dashboard')">
+                    <a href="javascript:void(0)" onclick="switchTab('dashboard')">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg> <span data-i18n="menu_dashboard">Dashboard</span>
                     </a>
                 </li>
                 <li class="menu-item" id="menu-capture">
-                    <a onclick="switchTab('capture')">
+                    <a href="javascript:void(0)" onclick="switchTab('capture')">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> <span data-i18n="menu_capture">Live Capture</span>
                     </a>
                 </li>
                 <li class="menu-item" id="menu-records">
-                    <a onclick="switchTab('records')">
+                    <a href="javascript:void(0)" onclick="switchTab('records')">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg> <span data-i18n="menu_records">Records</span>
                     </a>
                 </li>
                 <li class="menu-item" id="menu-alerts">
-                    <a onclick="switchTab('alerts')">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> <span data-i18n="menu_alerts">Alerts</span> <span id="alerts-badge" style="background: #ef4444; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 8px; font-weight: bold; display: none;">0</span>
+                    <a href="javascript:void(0)" onclick="switchTab('alerts')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 1 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> <span data-i18n="menu_alerts">Alerts</span> <span id="alerts-badge" style="background: #ef4444; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 8px; font-weight: bold; display: none;">0</span>
                     </a>
                 </li>
                 <li class="menu-item" id="menu-parking">
-                    <a onclick="switchTab('parking')">
+                    <a href="javascript:void(0)" onclick="switchTab('parking')">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg> <span data-i18n="menu_parking">Parking</span>
                     </a>
                 </li>
                 <li class="menu-item" id="menu-entrance">
-                    <a onclick="switchTab('entrance')">
+                    <a href="javascript:void(0)" onclick="switchTab('entrance')">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> <span data-i18n="menu_entrance">Entrance History</span>
                     </a>
                 </li>
-                <li class="menu-item" id="menu-settings">
-                    <a onclick="switchTab('settings')">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> <span data-i18n="menu_settings">Settings</span>
+                <li class="menu-item" id="menu-admin">
+                    <a href="javascript:void(0)" onclick="switchTab('admin')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> <span data-i18n="menu_admin">Admin Panel</span>
                     </a>
                 </li>
+
 
             </ul>
         </div>
@@ -90,9 +92,60 @@
                     <input type="text" placeholder="Search plates, owner..." data-i18n-placeholder="search_placeholder" class="search-input" id="globalSearchInput" oninput="handleGlobalSearch(this.value)" onfocus="handleGlobalSearch(this.value)" autocomplete="off">
                     <div id="globalSearchResultsDropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; min-width: 320px; background: white; border: 1px solid var(--border-color); border-radius: 12px; margin-top: 6px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); z-index: 9999; max-height: 400px; overflow-y: auto; padding: 6px;"></div>
                 </div>
-                <div id="headerLiveClockContainer" style="display: flex; align-items: center; gap: 8px; padding: 6px 14px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 20px; font-size: 13px; font-weight: 700; color: var(--text-main); margin-left: 5px;">
-                    <span class="live-pulse-dot"></span>
-                    <span id="headerLiveClockText">--:--:-- --</span>
+                <div id="headerLiveClockContainer" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 6px 14px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 20px; font-size: 13px; font-weight: 700; color: var(--text-main); margin-left: 5px; white-space: nowrap; flex-shrink: 0; height: 38px; box-sizing: border-box;">
+                    <span class="live-pulse-dot" style="flex-shrink: 0;"></span>
+                    <span id="headerLiveClockText" style="white-space: nowrap; font-variant-numeric: tabular-nums;">--:--:-- --</span>
+                </div>
+                <div class="custom-verification-dropdown" style="position: relative; margin-left: 5px; flex-shrink: 0;">
+                    <button type="button" id="headerVerificationTrigger" onclick="toggleHeaderVerificationDropdown(event)" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 6px 14px; background: #ffffff; border: 1.5px solid #3b82f6; border-radius: 20px; cursor: pointer; outline: none; transition: all 0.2s; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08); height: 38px; white-space: nowrap; flex-shrink: 0; box-sizing: border-box;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 11 12 14 22 4"/></svg>
+                        <span style="font-size: 11px; color: #64748b; font-weight: 700; white-space: nowrap;" data-i18n="verif_label_prefix">Verification:</span>
+                        <span id="headerVerificationLabel" style="font-size: 12px; font-weight: 800; color: #0f172a; white-space: nowrap;">Smart Verification</span>
+                        <svg id="headerChevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.2s; margin-left: 2px; flex-shrink: 0;"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+
+                    <div id="headerVerificationPanel" style="display: none; position: absolute; top: calc(100% + 8px); right: 0; min-width: 440px; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 20px 40px -4px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0,0,0,0.06); padding: 8px; z-index: 999999;">
+                        
+                        <div onclick="selectVerificationMode('smart')" class="custom-dropdown-option active" id="hdr-opt-smart" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-radius: 12px; cursor: pointer; transition: background 0.15s; margin-bottom: 4px; background: #eff6ff;">
+                            <div style="display: flex; align-items: center; gap: 14px;">
+                                <div style="width: 38px; height: 38px; border-radius: 10px; background: #dbeafe; color: #2563eb; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polygon points="12 8 13.5 10.5 16 11 14 13 14.5 16 12 14.5 9.5 16 10 13 8 11 10.5 10.5"/></svg>
+                                </div>
+                                <div style="text-align: left;">
+                                    <div style="font-size: 13px; font-weight: 800; color: #0f172a;" data-i18n="verif_opt_smart_title">Smart Verification (Unknowns & Low Confidence)</div>
+                                    <div style="font-size: 11px; color: #64748b; margin-top: 2px;" data-i18n="verif_opt_smart_desc">System will intelligently verify unknown or low-confidence detections.</div>
+                                </div>
+                            </div>
+                            <svg class="check-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 8px;"><polyline points="20 6 9 17 4 12"/></svg>
+                        </div>
+
+                        <div onclick="selectVerificationMode('strict')" class="custom-dropdown-option" id="hdr-opt-strict" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-radius: 12px; cursor: pointer; transition: background 0.15s; margin-bottom: 4px;">
+                            <div style="display: flex; align-items: center; gap: 14px;">
+                                <div style="width: 38px; height: 38px; border-radius: 10px; background: #fff7ed; color: #ea580c; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><circle cx="12" cy="11" r="1"/><path d="M12 7v2"/></svg>
+                                </div>
+                                <div style="text-align: left;">
+                                    <div style="font-size: 13px; font-weight: 800; color: #0f172a;" data-i18n="verif_opt_strict_title">Strict Verification (Always Ask)</div>
+                                    <div style="font-size: 11px; color: #64748b; margin-top: 2px;" data-i18n="verif_opt_strict_desc">Always ask for manual verification, regardless of confidence.</div>
+                                </div>
+                            </div>
+                            <svg class="check-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 8px; display: none;"><polyline points="20 6 9 17 4 12"/></svg>
+                        </div>
+
+                        <div onclick="selectVerificationMode('auto')" class="custom-dropdown-option" id="hdr-opt-auto" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-radius: 12px; cursor: pointer; transition: background 0.15s;">
+                            <div style="display: flex; align-items: center; gap: 14px;">
+                                <div style="width: 38px; height: 38px; border-radius: 10px; background: #f0fdf4; color: #16a34a; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+                                </div>
+                                <div style="text-align: left;">
+                                    <div style="font-size: 13px; font-weight: 800; color: #0f172a;" data-i18n="verif_opt_auto_title">Full Auto (No Popups)</div>
+                                    <div style="font-size: 11px; color: #64748b; margin-top: 2px;" data-i18n="verif_opt_auto_desc">Automatically verify all detections without any popups.</div>
+                                </div>
+                            </div>
+                            <svg class="check-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 8px; display: none;"><polyline points="20 6 9 17 4 12"/></svg>
+                        </div>
+
+                    </div>
                 </div>
                 <div style="margin-left: 5px;">
                     <select id="languageSelector" onchange="setLanguage(this.value)" style="height: 38px; padding: 0 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--card-bg); color: var(--text-main); font-size: 12px; font-weight: bold; cursor: pointer; outline: none; transition: border-color 0.2s;">
@@ -170,11 +223,11 @@
                             <h3 data-i18n="facility_capacity">Facility Parking Capacity</h3>
                             <p data-i18n="facility_capacity_sub">Live occupancy status meter</p>
                         </div>
-                        <span class="live-badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981;"><span class="live-pulse-dot"></span> Live</span>
+                        <span class="live-badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981;"><span class="live-pulse-dot"></span> <span data-i18n="live_label">Live</span></span>
                     </div>
 
                     <div style="padding: 10px 0; text-align: center;">
-                        <div id="meterPercentageText" style="font-size: 38px; font-weight: 800; color: #2563eb; line-height: 1;">0%</div>
+                        <div id="meterPercentageText" style="font-size: 38px; font-weight: 800; color: #2563eb; line-height: 1;">0/0</div>
                         <div id="meterSubText" style="font-size: 13px; color: var(--text-muted); font-weight: 600; margin-top: 4px;">0 of 0 Parking Bays Occupied</div>
                     </div>
 
@@ -201,7 +254,7 @@
                             <p data-i18n="vehicles_by_cat_sub">Current distribution of parked vehicle types</p>
                         </div>
                     </div>
-                    <div class="chart-container" style="height: 190px;">
+                    <div id="categoryDistContainer" class="chart-container" style="height: 190px;">
                         <canvas id="categoryDistChart"></canvas>
                     </div>
                 </div>
@@ -214,7 +267,7 @@
                             <p data-i18n="gate_traffic_sub">Total arrivals (In) vs departures (Out)</p>
                         </div>
                     </div>
-                    <div class="chart-container" style="height: 190px;">
+                    <div id="gateTrafficContainer" class="chart-container" style="height: 190px;">
                         <canvas id="gateTrafficChart"></canvas>
                     </div>
                 </div>
@@ -266,7 +319,8 @@
 
         <!-- 2. LIVE CAPTURE & SINGLE GATE SMART ANPR TAB -->
         <div id="tab-capture" class="tab-section">
-            
+
+
             <!-- SINGLE GATE SMART CONTROL CARD -->
             <div class="table-card" style="border-top: 4px solid var(--primary-color); margin-bottom: 24px; box-shadow: 0 4px 16px rgba(0,0,0,0.03);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
@@ -304,14 +358,16 @@
             <!-- LIVE ANPR VIDEO FEED & SCANNER LOGS -->
             <div class="capture-layout">
                 <div>
-                    <div class="video-feed-container">
-                        <video id="webcamFeed" class="video-feed" autoplay playsinline muted></video>
+                    <div class="video-feed-container" style="position: relative; overflow: hidden; border-radius: 12px;">
+                        <video id="webcamFeed" class="video-feed" autoplay playsinline muted style="width: 100%; display: block;"></video>
+                        <canvas id="detectionOverlayCanvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5;"></canvas>
                         <canvas id="snapshotCanvas" style="display: none;"></canvas>
                     </div>
-                    <div class="capture-controls">
+                    <div class="capture-controls" style="display: flex; gap: 8px; flex-wrap: wrap;">
                         <button onclick="startCamera()" class="btn-primary" style="width: auto;" data-i18n="btn_start_cam">Start Live Camera</button>
                         <button onclick="stopCamera()" class="btn-secondary" style="width: auto;" data-i18n="btn_stop_cam">Stop Camera</button>
                         <button onclick="scanCurrentFrame()" class="btn-secondary" style="width: auto; background-color: var(--accent-color); color: white; border-color: var(--accent-color);" data-i18n="btn_scan_frame">Capture & Scan Frame</button>
+                        <button id="btnAutoLiveScan" onclick="toggleAutoLiveScan()" class="btn-secondary" style="width: auto; color: #10b981; border-color: #10b981; background: rgba(16, 185, 129, 0.08);">⚡ Continuous AI Scan: ON</button>
                     </div>
                 </div>
                 <div>
@@ -332,7 +388,7 @@
         <div id="tab-records" class="tab-section">
             <div class="table-card">
                 <!-- Filters and Actions Bar -->
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 15px;">
                     <div style="display: flex; gap: 8px;">
                         <button onclick="filterRecords('all')" class="btn-secondary filter-btn active" style="width: auto; padding: 6px 16px; border-radius: 20px; font-weight: 600; font-size: 13px; background-color: var(--accent-color); color: white; border-color: var(--accent-color);" id="filter-all" data-i18n="filter_all">All</button>
                         <button onclick="filterRecords('allowed')" class="btn-secondary filter-btn" style="width: auto; padding: 6px 16px; border-radius: 20px; font-weight: 600; font-size: 13px;" id="filter-allowed" data-i18n="filter_allowed">Allowed</button>
@@ -343,34 +399,56 @@
                         <button onclick="exportCSV()" class="btn-secondary" style="width: auto; padding: 8px 16px; font-size: 13px; display: flex; align-items: center; gap: 6px;">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> <span data-i18n="btn_export_csv">Export CSV</span>
                         </button>
-                        <button onclick="openVehiclesManagerModal()" class="btn-secondary" style="width: auto; padding: 8px 16px; font-size: 13px; background-color: var(--accent-color); color: white; border-color: var(--accent-color); display: flex; align-items: center; gap: 6px;">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg> <span data-i18n="btn_manage_vehicles">Manage Vehicles</span>
-                        </button>
-                        <button onclick="clearAllLogs()" class="btn-secondary" style="width: auto; padding: 8px 16px; font-size: 13px; background-color: var(--danger-color); color: white; border-color: var(--danger-color); display: flex; align-items: center; gap: 6px;">
+                        <button onclick="clearAllLogs()" id="btnClearDetectionLogs" class="btn-secondary" style="width: auto; padding: 8px 16px; font-size: 13px; background-color: var(--danger-color); color: white; border-color: var(--danger-color); display: flex; align-items: center; gap: 6px;">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> <span data-i18n="btn_clear_all_records">Clear All Logs</span>
                         </button>
                     </div>
                 </div>
 
-                <!-- Table -->
-                <table class="custom-table">
-                    <thead>
-                        <tr>
-                            <th data-i18n="th_id">ID</th>
-                            <th data-i18n="th_plate">Plate</th>
-                            <th data-i18n="th_time">Time</th>
-                            <th data-i18n="th_camera">Camera</th>
-                            <th data-i18n="th_vehicle">Vehicle</th>
-                            <th data-i18n="th_confidence">Confidence</th>
-                            <th data-i18n="th_status">Status</th>
-                            <th data-i18n="th_owner">Owner</th>
-                            <th data-i18n="th_actions">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="recordsTableBody">
-                        <!-- Filled by JS -->
-                    </tbody>
-                </table>
+                <!-- Detection Search & Controls Bar -->
+                <div class="table-controls-bar">
+                    <div class="table-search-group">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" id="detectionSearchInput" class="table-search-input" placeholder="Search detection plate, owner, model...">
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 13px; color: var(--text-muted);">Rows per page:</span>
+                        <select id="detectionPageSizeSelect" class="pagination-select" onchange="changeDetectionPageSize(this.value)">
+                            <option value="10" selected>10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Scrollable Table -->
+                <div class="table-scroll-container">
+                    <table class="custom-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="th_id">ID</th>
+                                <th data-i18n="th_plate">Plate</th>
+                                <th data-i18n="th_time">Time</th>
+                                <th data-i18n="th_camera">Camera</th>
+                                <th data-i18n="th_vehicle">Vehicle</th>
+                                <th data-i18n="th_confidence">Confidence</th>
+                                <th data-i18n="th_status">Status</th>
+                                <th data-i18n="th_owner">Owner</th>
+                                <th data-i18n="th_actions">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recordsTableBody">
+                            <!-- Filled by JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Detection Pagination Bar -->
+                <div class="pagination-bar">
+                    <div id="detectionPaginationInfo" class="pagination-info">Showing 0 of 0 entries</div>
+                    <div id="detectionPaginationControls" class="pagination-controls"></div>
+                </div>
             </div>
         </div>
 
@@ -379,9 +457,10 @@
             <div class="table-card">
                 <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                     <h3 data-i18n="alerts_title">Active Security Alerts</h3>
-                    <button onclick="clearAllAlerts()" class="btn-secondary" style="width: auto; padding: 6px 14px; font-size: 12px; background-color: var(--danger-color); color: white; border-color: var(--danger-color); display: flex; align-items: center; gap: 6px;">
+                    <button onclick="clearAllAlerts()" id="btnClearAlerts" class="btn-secondary" style="width: auto; padding: 6px 14px; font-size: 12px; background-color: var(--danger-color); color: white; border-color: var(--danger-color); display: flex; align-items: center; gap: 6px;">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> <span data-i18n="btn_clear_all_alerts">Clear All Alerts</span>
                     </button>
+
                 </div>
                 <table class="custom-table">
                     <thead>
@@ -431,9 +510,6 @@
             <!-- Actions row -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; gap: 15px; flex-wrap: wrap;">
                 <h3 data-i18n="parking_slots_title" style="font-size: 18px; font-weight: 700; color: var(--text-main); margin: 0;">Parking Lots / Slots</h3>
-                <button onclick="initializeParkingSlots()" class="btn-secondary" style="width: auto; padding: 8px 16px; font-size: 13px; background-color: var(--accent-color); color: white; border-color: var(--accent-color); display: flex; align-items: center; gap: 6px;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg> <span data-i18n="btn_initialize">Initialize Parking Slots</span>
-                </button>
             </div>
 
             <!-- Parking Slot Grid -->
@@ -445,9 +521,10 @@
             <div class="table-card">
                 <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                     <h3 data-i18n="history_title">Parking History & Session Logs</h3>
-                    <button onclick="clearAllParkingLogs()" class="btn-secondary" style="width: auto; padding: 6px 14px; font-size: 12px; background-color: var(--danger-color); color: white; border-color: var(--danger-color); display: flex; align-items: center; gap: 6px;">
+                    <button onclick="clearAllParkingLogs()" id="btnClearParkingLogs" class="btn-secondary" style="width: auto; padding: 6px 14px; font-size: 12px; background-color: var(--danger-color); color: white; border-color: var(--danger-color); display: flex; align-items: center; gap: 6px;">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> <span data-i18n="btn_clear_all_parking">Clear All Logs</span>
                     </button>
+
                 </div>
 
                 <div style="overflow-x: auto;">
@@ -488,7 +565,7 @@
                     <span class="live-badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981;">AI Gate Endpoint Active</span>
                 </div>
                 
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; align-items: end; margin-top: 15px;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; align-items: end; margin-top: 15px;">
                     <div>
                         <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;" data-i18n="lbl_entrance_plate">Plate Number *</label>
                         <input type="text" id="entrancePlateInput" class="form-input" placeholder="ENTER PLATE NUMBER" style="text-transform: uppercase; margin-bottom: 0; height: 38px; font-weight: bold; letter-spacing: 1px;">
@@ -502,9 +579,9 @@
                         <input type="text" id="entranceSnapshotInput" class="form-input" placeholder="e.g. uploads/snapshot.jpg" style="margin-bottom: 0; height: 38px;">
                     </div>
                     <div>
-                        <button onclick="submitEntranceRecord()" class="btn-primary" style="height: 38px; margin-top: 0; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600;">
+                        <button onclick="submitEntranceRecord()" class="btn-primary" style="height: 38px; margin-top: 0; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600; white-space: nowrap; width: 100%; min-width: 170px;">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-                            <span data-i18n="btn_record_entrance">Process Entrance</span>
+                            <span data-i18n="btn_record_entrance" style="white-space: nowrap;">Process Entrance</span>
                         </button>
                     </div>
                 </div>
@@ -516,7 +593,7 @@
 
             <!-- Entrance History Table Card -->
             <div class="table-card">
-                <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 20px;">
+                <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 16px;">
                     <div>
                         <h3 style="margin: 0; font-size: 18px; font-weight: 700;" data-i18n="entrance_history_title">Approved Entrance History</h3>
                         <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px; margin-bottom: 0;" data-i18n="entrance_history_subtitle">Recorded gate entries with snapshots, timestamps, and vehicle details</p>
@@ -525,13 +602,35 @@
                         <button onclick="exportEntranceCSV()" class="btn-secondary" style="width: auto; padding: 8px 16px; font-size: 13px; display: flex; align-items: center; gap: 6px;">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> <span data-i18n="btn_export_csv">Export CSV</span>
                         </button>
-                        <button onclick="clearAllEntranceRecords()" class="btn-secondary" style="width: auto; padding: 8px 16px; font-size: 13px; background-color: var(--danger-color); color: white; border-color: var(--danger-color); display: flex; align-items: center; gap: 6px;">
+                        <button onclick="clearAllEntranceRecords()" id="btnClearEntranceHistory" class="btn-secondary" style="width: auto; padding: 8px 16px; font-size: 13px; background-color: var(--danger-color); color: white; border-color: var(--danger-color); display: flex; align-items: center; gap: 6px;">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> <span data-i18n="btn_clear_entrance">Clear Entrance History</span>
                         </button>
                     </div>
                 </div>
 
-                <div style="overflow-x: auto;">
+                <!-- Controls Bar: Search & Filters -->
+                <div class="table-controls-bar">
+                    <div class="table-search-group">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" id="regSearchInput" class="table-search-input" placeholder="Search plate, owner, slot..." oninput="filterRegisteredEntranceTable()">
+                        <select id="regStatusFilter" class="table-filter-select" onchange="filterRegisteredEntranceTable()">
+                            <option value="all">All Statuses</option>
+                            <option value="inside">Still Inside</option>
+                            <option value="departed">Departed</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 13px; color: var(--text-muted);">Rows per page:</span>
+                        <select id="regPageSizeSelect" class="pagination-select" onchange="changeRegPageSize(this.value)">
+                            <option value="10" selected>10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="table-scroll-container">
                     <table class="custom-table">
                         <thead>
                             <tr>
@@ -552,11 +651,17 @@
                         </tbody>
                     </table>
                 </div>
+
+                <!-- Pagination Bar -->
+                <div class="pagination-bar">
+                    <div id="regPaginationInfo" class="pagination-info">Showing 0 of 0 entries</div>
+                    <div id="regPaginationControls" class="pagination-controls"></div>
+                </div>
             </div>
 
             <!-- Approved Guest Vehicle Entrance History Table Card -->
             <div class="table-card" style="margin-top: 25px;">
-                <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 20px;">
+                <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 16px;">
                     <div>
                         <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: #b45309; display: flex; align-items: center; gap: 8px;">
                             <span>🙋‍♂️ Approved Guest Vehicle History</span>
@@ -568,20 +673,42 @@
                         <button onclick="exportGuestCSV()" class="btn-secondary" style="width: auto; padding: 8px 16px; font-size: 13px; display: flex; align-items: center; gap: 6px;">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Export Guest CSV
                         </button>
-                        <button onclick="clearAllGuestEntranceRecords()" class="btn-secondary" style="width: auto; padding: 8px 16px; font-size: 13px; background-color: var(--danger-color); color: white; border-color: var(--danger-color); display: flex; align-items: center; gap: 6px;">
+                        <button onclick="clearAllGuestEntranceRecords()" id="btnClearGuestHistory" class="btn-secondary" style="width: auto; padding: 8px 16px; font-size: 13px; background-color: var(--danger-color); color: white; border-color: var(--danger-color); display: flex; align-items: center; gap: 6px;">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Clear Guest History
                         </button>
                     </div>
                 </div>
 
-                <div style="overflow-x: auto;">
+                <!-- Guest Controls Bar: Search & Filters -->
+                <div class="table-controls-bar">
+                    <div class="table-search-group">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" id="guestSearchInput" class="table-search-input" placeholder="Search guest plate, visitor details, slot..." oninput="filterGuestEntranceTable()">
+                        <select id="guestStatusFilter" class="table-filter-select" onchange="filterGuestEntranceTable()">
+                            <option value="all">All Statuses</option>
+                            <option value="inside">Still Inside</option>
+                            <option value="departed">Departed</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 13px; color: var(--text-muted);">Rows per page:</span>
+                        <select id="guestPageSizeSelect" class="pagination-select" onchange="changeGuestPageSize(this.value)">
+                            <option value="10" selected>10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="table-scroll-container">
                     <table class="custom-table">
                         <thead>
                             <tr>
                                 <th data-i18n="th_id">ID</th>
                                 <th data-i18n="th_snapshot">Snapshot</th>
                                 <th data-i18n="th_plate">Plate Number</th>
-                                <th>Visitor / Guest Details</th>
+                                <th data-i18n="th_visitor_details">Visitor / Guest Details</th>
                                 <th data-i18n="th_slot">Parking Slot</th>
                                 <th data-i18n="th_status">Status</th>
                                 <th data-i18n="th_entrance_time">Entrance Time</th>
@@ -595,37 +722,560 @@
                         </tbody>
                     </table>
                 </div>
+
+                <!-- Guest Pagination Bar -->
+                <div class="pagination-bar">
+                    <div id="guestPaginationInfo" class="pagination-info">Showing 0 of 0 entries</div>
+                    <div id="guestPaginationControls" class="pagination-controls"></div>
+                </div>
             </div>
         </div>
 
-        <!-- 5. SETTINGS TAB -->
-        <div id="tab-settings" class="tab-section">
 
-            <div class="table-card" style="max-width: 500px;">
-                <div class="table-header" style="margin-bottom: 20px;">
-                    <h3 data-i18n="settings_title">Operator Settings</h3>
+        <!-- 6. ADMIN PANEL TAB -->
+        <div id="tab-admin" class="tab-section">
+            <div class="admin-tab-bar" style="display: flex; gap: 6px; background: #ffffff; padding: 6px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.04); margin-bottom: 24px; overflow-x: auto;">
+                <button class="admin-nav-tab active" id="adminSubtabUsers" onclick="switchAdminSubtab('users')">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <span data-i18n="subtab_user_roles">User Roles</span>
+                </button>
+                <button class="admin-nav-tab" id="adminSubtabVehicles" onclick="switchAdminSubtab('vehicles')">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
+                    <span data-i18n="subtab_vehicle_mgmt">Vehicle Mgmt</span>
+                </button>
+                <button class="admin-nav-tab" id="adminSubtabParking" onclick="switchAdminSubtab('parking')">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
+                    <span data-i18n="subtab_parking_slots">Parking Slots</span>
+                </button>
+                <button class="admin-nav-tab" id="adminSubtabCameras" onclick="switchAdminSubtab('cameras')">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                    <span data-i18n="subtab_cameras">Cameras</span>
+                </button>
+                <button class="admin-nav-tab" id="adminSubtabSearch" onclick="switchAdminSubtab('search')">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <span data-i18n="subtab_adv_search">Advanced Search</span>
+                </button>
+                <button class="admin-nav-tab" id="adminSubtabAnalytics" onclick="switchAdminSubtab('analytics')">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                    <span data-i18n="subtab_analytics">Analytics</span>
+                </button>
+                <button class="admin-nav-tab" id="adminSubtabAudit" onclick="switchAdminSubtab('audit')">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                    <span data-i18n="subtab_audit_logs">Audit Logs</span>
+                </button>
+                <button class="admin-nav-tab" id="adminSubtabControls" onclick="switchAdminSubtab('controls')">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    <span data-i18n="subtab_controls">Controls</span>
+                </button>
+            </div>
+
+
+            <!-- Subtab 1: Users -->
+            <div id="admin-view-users" class="admin-view-section">
+                <div class="admin-page-header">
+                    <div class="admin-header-title">
+                        <h1 data-i18n="title_admin_users">Admin Management Suite</h1>
+                        <p data-i18n="sub_admin_users">Manage system operators, access levels, and security clearances.</p>
+                    </div>
+                    <button onclick="openAddUserModal()" class="admin-btn-primary">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                        <span data-i18n="btn_add_new_user">Add New User</span>
+                    </button>
                 </div>
-                <div class="form-group">
-                    <label data-i18n="lbl_op_name">Operator Name</label>
-                    <input type="text" id="settingOperatorName" class="form-input" readonly value="Admin">
+
+                <div class="admin-card-container">
+                    <div class="admin-toolbar-row">
+                        <div class="admin-search-wrapper">
+                            <svg class="admin-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                            <input type="text" id="adminUserSearchInput" oninput="filterAdminUsersTable(this.value)" class="admin-search-input" placeholder="Search users by ID or Name...">
+                        </div>
+                        <div class="admin-toolbar-actions">
+                            <button onclick="loadAdminUsers()" class="admin-btn-outline">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                                <span data-i18n="btn_filter">Filter</span>
+                            </button>
+                            <button onclick="exportUserListCSV()" class="admin-btn-outline">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                <span data-i18n="btn_export">Export</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="th_user_id">USER ID</th>
+                                <th data-i18n="th_username">USERNAME</th>
+                                <th data-i18n="th_role">ROLE</th>
+                                <th data-i18n="th_status">STATUS</th>
+                                <th data-i18n="th_actions">ACTIONS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminUsersTableBody">
+                            <tr><td colspan="5" style="text-align: center; padding: 25px; color: #64748b;">Loading system operators...</td></tr>
+                        </tbody>
+                    </table>
+
+                    <div class="admin-card-footer">
+                        <div class="admin-footer-text" id="adminUsersFooterCount">Showing 1 to 3 of 3 users</div>
+                        <div class="admin-pagination-flex">
+                            <button class="admin-page-btn">&lt;</button>
+                            <button class="admin-page-btn active">1</button>
+                            <button class="admin-page-btn">&gt;</button>
+                        </div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label data-i18n="lbl_api_url">Target Server API URL</label>
-                    <input type="text" id="settingApiUrl" class="form-input" readonly value="http://127.0.0.1:8000">
+            </div>
+
+            <!-- Subtab 2: Vehicle Management -->
+            <div id="admin-view-vehicles" class="admin-view-section" style="display: none;">
+                <div class="admin-page-header">
+                    <div class="admin-header-title">
+                        <h1 data-i18n="title_vehicle_registry">Vehicle Registry</h1>
+                        <p data-i18n="sub_vehicle_registry">Manage and monitor registered fleet and guest vehicles.</p>
+                    </div>
+                    <button onclick="openAddVehicleModal()" class="admin-btn-primary">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        <span data-i18n="btn_register_new_vehicle">+ Register New Vehicle</span>
+                    </button>
                 </div>
-                <div class="form-group">
-                    <label data-i18n="lbl_cam_loc">Camera 01 Location</label>
-                    <input type="text" class="form-input" readonly value="Cam-01 North Gate">
+
+
+                <div class="admin-card-container">
+                    <div class="admin-toolbar-row">
+                        <div style="display: flex; gap: 10px;">
+                            <select id="adminVehicleStatusFilter" onchange="filterAdminVehiclesTable()" class="admin-select-filter">
+                                <option value="REGISTERED" selected data-i18n="opt_registered">Registered</option>
+                                <option value="ALL" data-i18n="opt_all_statuses">All Statuses</option>
+                                <option value="GUEST" data-i18n="opt_guest">Guest</option>
+                            </select>
+                            <select id="adminVehicleCategoryFilter" onchange="filterAdminVehiclesTable()" class="admin-select-filter">
+                                <option value="" data-i18n="opt_all_categories">All Categories</option>
+                                <option value="Car" data-i18n="cat_car">Car</option>
+                                <option value="Bike" data-i18n="cat_bike">Bike</option>
+                                <option value="Van" data-i18n="cat_van">Van</option>
+                                <option value="Bus" data-i18n="cat_bus">Bus</option>
+                                <option value="Truck" data-i18n="cat_truck">Truck</option>
+                            </select>
+                        </div>
+                        <div class="admin-toolbar-actions">
+                            <button onclick="exportVehiclesCSV()" class="admin-btn-outline">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                <span data-i18n="btn_export_list">Export List</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="th_id">ID</th>
+                                <th data-i18n="th_plate">PLATE NUMBER</th>
+                                <th data-i18n="th_owner">OWNER NAME</th>
+                                <th data-i18n="th_category">CATEGORY</th>
+                                <th data-i18n="th_status">STATUS</th>
+                                <th data-i18n="th_actions">ACTIONS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminVehiclesTableBody">
+                            <tr><td colspan="6" style="text-align: center; padding: 25px; color: #64748b;">Loading vehicle registry...</td></tr>
+                        </tbody>
+                    </table>
+
+                    <div class="admin-card-footer">
+                        <div class="admin-footer-text" id="adminVehiclesFooterCount">Showing 1 to 4 of 4 entries</div>
+                        <div class="admin-pagination-flex">
+                            <button class="admin-page-btn">&lt;</button>
+                            <button class="admin-page-btn active">1</button>
+                            <button class="admin-page-btn">&gt;</button>
+                        </div>
+                    </div>
                 </div>
-                <p style="font-size: 13px; color: var(--text-muted);" data-i18n="settings_desc">
-                    System parameters managed by system administrator. Contact security supervisor to alter API configurations.
-                </p>
+            </div>
+
+
+            <!-- Subtab 3: Parking Management -->
+            <div id="admin-view-parking" class="admin-view-section" style="display: none;">
+                <div class="admin-page-header">
+                    <div class="admin-header-title">
+                        <h1 data-i18n="title_parking_oversight">Parking Bay Oversight</h1>
+                        <p data-i18n="sub_parking_oversight">Configure slot availability, initialize default bays, and force-release occupied parking slots.</p>
+                    </div>
+                </div>
+
+                <div class="admin-card-container" style="padding: 20px; margin-bottom: 24px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                        <div>
+                            <h3 style="margin: 0; font-size: 15px; font-weight: 700; color: #0f172a;" data-i18n="slot_init_title">Slot Initialization & Management</h3>
+                            <p style="margin: 4px 0 0 0; font-size: 12px; color: #64748b;" data-i18n="slot_init_desc">Only system administrators can initialize default slots (P1, P2, P3) or add custom new bays.</p>
+                        </div>
+                        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                            <button onclick="openParkingLayoutModal()" class="admin-btn-outline" style="display: flex; align-items: center; gap: 6px;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+                                <span>Physical Layout Blueprint</span>
+                            </button>
+                            <button onclick="handleAdminInitSlots()" class="admin-btn-primary">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                                <span data-i18n="btn_initiate_slots">Initiate Standard Slots (P1, P2, P3)</span>
+                            </button>
+                            <div style="display: flex; gap: 6px;">
+                                <input type="text" id="adminNewSlotInput" class="admin-search-input" placeholder="e.g. P4" style="width: 100px; padding-left: 12px; height: 38px;">
+                                <button onclick="handleAdminAddSlot()" class="admin-btn-outline">
+                                    <span data-i18n="btn_add_custom_slot">+ Add Custom Slot</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="admin-card-container">
+                    <div class="admin-toolbar-row">
+                        <h3 style="margin: 0; font-size: 15px; font-weight: 700; color: #0f172a;" data-i18n="active_bays_title">Active Parking Bays & Override Controls</h3>
+                    </div>
+
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="th_id">SLOT ID</th>
+                                <th data-i18n="th_slot_number">SLOT NAME</th>
+                                <th data-i18n="th_status">STATUS</th>
+                                <th data-i18n="th_actions">ACTIONS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminParkingSlotsTableBody">
+                            <tr><td colspan="4" style="text-align: center; padding: 25px; color: #64748b;">Loading parking slots...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+
+            <!-- Subtab 4: Camera Management -->
+            <div id="admin-view-cameras" class="admin-view-section" style="display: none;">
+                <div class="admin-card-container">
+                    <div class="admin-toolbar-row" style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3 style="margin: 0; font-size: 15px; font-weight: 700; color: #0f172a;" data-i18n="anpr_cameras_title">ANPR Camera Streams & Feeds</h3>
+                        <button onclick="openAddCameraModal()" class="admin-btn-primary" style="font-size: 12px; padding: 8px 14px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            <span data-i18n="btn_add_camera_feed">+ Add Camera Feed</span>
+                        </button>
+                    </div>
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="th_id">ID</th>
+                                <th data-i18n="th_camera_name">CAMERA NAME</th>
+                                <th data-i18n="th_location">LOCATION</th>
+                                <th data-i18n="th_feed_url">RTSP / FEED URL</th>
+                                <th data-i18n="th_fps">FPS</th>
+                                <th data-i18n="th_status">STATUS</th>
+                                <th data-i18n="th_action">ACTION</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminCamerasTableBody">
+                            <tr><td colspan="7" style="text-align: center; padding: 25px; color: #64748b;">Loading camera configurations...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Subtab 5: Advanced Search -->
+            <div id="admin-view-search" class="admin-view-section" style="display: none;">
+                <div class="table-card" style="padding: 20px; margin-bottom: 20px;">
+                    <h3 style="margin-top: 0;" data-i18n="adv_search_title">Multi-Criteria Database Query Engine</h3>
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 15px;">
+                        <div>
+                            <label style="font-size: 11px; font-weight: 700;" data-i18n="lbl_plate_or_owner">License Plate / Owner</label>
+                            <input type="text" id="adminSearchQuery" class="form-input" placeholder="e.g. CAB-1234 or Perera" style="height: 36px;">
+                        </div>
+                        <div>
+                            <label style="font-size: 11px; font-weight: 700;" data-i18n="lbl_vehicle_category">Vehicle Category</label>
+                            <select id="adminSearchCategory" class="form-input" style="height: 36px; padding: 0 8px; width: 100%;">
+                                <option value="" data-i18n="opt_all_categories">All Categories</option>
+                                <option value="Car" data-i18n="cat_car">Car</option>
+                                <option value="Bike" data-i18n="cat_bike">Bike</option>
+                                <option value="Van" data-i18n="cat_van">Van</option>
+                                <option value="Bus" data-i18n="cat_bus">Bus</option>
+                                <option value="Truck" data-i18n="cat_truck">Truck</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size: 11px; font-weight: 700;" data-i18n="lbl_detection_status">Detection Status</label>
+                            <select id="adminSearchStatus" class="form-input" style="height: 36px; padding: 0 8px; width: 100%;">
+                                <option value="" data-i18n="opt_all_statuses">All Statuses</option>
+                                <option value="Allowed" data-i18n="status_allowed">Allowed</option>
+                                <option value="Flagged" data-i18n="status_flagged">Flagged</option>
+                                <option value="Approved" data-i18n="approved">Approved</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; align-items: flex-end;">
+                            <button onclick="executeAdminSearch()" class="btn-primary" style="height: 36px; width: 100%; font-weight: 700; font-size: 12px;">
+                                <span data-i18n="btn_execute_search">🔍 Execute Search</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-card">
+                    <h3 data-i18n="matching_records_title">Matching Vehicle & Detection Records</h3>
+                    <div id="adminSearchResultsContainer" style="margin-top: 15px;">
+                        <p style="text-align: center; color: var(--text-muted); padding: 20px;">Enter search terms above and click 'Execute Search'.</p>
+                    </div>
+                </div>
+            </div>
+
+
+            <!-- Subtab 2: Analytics -->
+            <div id="admin-view-analytics" class="admin-view-section" style="display: none;">
+                <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 20px;" id="adminStatsOverview">
+                    <!-- Populated dynamically -->
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div class="table-card" style="padding: 20px;">
+                        <h4 style="margin-top:0; font-weight:700;" data-i18n="analytics_cat_dist">Vehicle Category Distribution</h4>
+                        <div style="height: 260px; position: relative;">
+                            <canvas id="adminCategoryChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="table-card" style="padding: 20px;">
+                        <h4 style="margin-top:0; font-weight:700;" data-i18n="analytics_status_ratios">Detection Status Ratios</h4>
+                        <div style="height: 260px; position: relative;">
+                            <canvas id="adminStatusChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Subtab 3: Audit Logs -->
+            <div id="admin-view-audit" class="admin-view-section" style="display: none;">
+                <div class="admin-card-container">
+                    <div class="admin-toolbar-row" style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3 style="margin: 0; font-size: 15px; font-weight: 700; color: #0f172a;" data-i18n="audit_logs_title">System Event Audit Logs</h3>
+                        <button onclick="loadAdminAuditLogs()" class="admin-btn-outline" style="font-size: 12px; height: 34px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                            <span data-i18n="btn_refresh_logs">Refresh Logs</span>
+                        </button>
+                    </div>
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="th_time">TIME</th>
+                                <th data-i18n="th_event_type">EVENT TYPE</th>
+                                <th data-i18n="th_details">DETAILS</th>
+                                <th data-i18n="th_level">LEVEL</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminAuditTableBody">
+                            <tr><td colspan="4" style="text-align: center; padding: 25px; color: #64748b;">Loading audit logs...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Subtab 4: Controls -->
+            <div id="admin-view-controls" class="admin-view-section" style="display: none;">
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
+                    <div class="table-card" style="padding: 20px;">
+                        <h4 style="margin-top:0; font-weight:700;" data-i18n="controls_export_tools">Data Export Tools</h4>
+                        <p style="font-size: 13px; color: var(--text-muted);" data-i18n="controls_export_desc">Download registered system records into standard CSV format for external auditing.</p>
+                        <div style="display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap;">
+                            <button onclick="exportDetectionsCSV()" class="btn-primary" style="min-height: 38px; height: auto; padding: 8px 14px; font-size: 12px; font-weight: 700;"><span data-i18n="btn_export_detection_logs">📥 Export Detection Logs (CSV)</span></button>
+                            <button onclick="exportVehiclesCSV()" class="btn-secondary" style="min-height: 38px; height: auto; padding: 8px 14px; font-size: 12px; font-weight: 700;"><span data-i18n="btn_export_reg_vehicles">📥 Export Registered Vehicles (CSV)</span></button>
+                        </div>
+                    </div>
+
+                    <div class="table-card" style="padding: 20px;">
+                        <h4 style="margin-top:0; font-weight:700;" data-i18n="controls_sec_title">Security Controls</h4>
+                        <p style="font-size: 13px; color: var(--text-muted);" data-i18n="controls_sec_desc">Emergency override dispatches and alarm silencer controls.</p>
+                        <div style="display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap;">
+                            <button onclick="silenceSiren()" class="btn-secondary" style="min-height: 38px; height: auto; padding: 8px 14px; font-size: 12px; font-weight: 700; color: #ef4444; border-color: #ef4444; background: rgba(239,68,68,0.1);"><span data-i18n="btn_silence_siren">🔕 Silence Alarm Siren</span></button>
+                            <button onclick="triggerGateOverride()" class="btn-primary" style="min-height: 38px; height: auto; padding: 8px 14px; font-size: 12px; font-weight: 700; background: #10b981; border-color: #10b981;"><span data-i18n="btn_override_gate">🚪 Override Gate Open</span></button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
 <!-- ================= MODALS ================= -->
+
+<!-- H. REAL-TIME DETECTION VERIFICATION & SNAPSHOT CONFIRMATION MODAL -->
+<div id="detectionConfirmModal" class="modal" style="z-index: 99999;">
+    <div class="modal-content" style="max-width: 580px; border-radius: 16px; background: white; padding: 0; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);">
+        <!-- Modal Header -->
+        <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: white; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(59, 130, 246, 0.2); color: #60a5fa; display: flex; align-items: center; justify-content: center;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                </div>
+                <div>
+                    <h3 id="confirmModalTitle" style="margin: 0; font-size: 16px; font-weight: 800; color: white;" data-i18n="modal_verif_title">Vehicle Detection Verification</h3>
+                    <p id="confirmModalSubtitle" style="margin: 0; font-size: 12px; color: #94a3b8;" data-i18n="modal_verif_sub">Review vehicle snapshot and confirm entrance authorization</p>
+                </div>
+            </div>
+            <span class="close-btn" onclick="closeDetectionConfirmModal()" style="color: #94a3b8; font-size: 24px; cursor: pointer;">&times;</span>
+        </div>
+
+        <div style="padding: 20px;">
+            <!-- Snapshot Preview Box -->
+            <div style="position: relative; width: 100%; height: 220px; border-radius: 12px; overflow: hidden; background: #090d16; border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: center; margin-bottom: 16px;">
+                <img id="confirmModalSnapshotImg" src="https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=600&q=80" alt="Vehicle Snapshot" style="width: 100%; height: 100%; object-fit: cover;">
+                <div style="position: absolute; top: 12px; right: 12px; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; color: white; border: 1px solid rgba(255, 255, 255, 0.2); display: flex; align-items: center; gap: 6px;">
+                    <span id="confirmModalConfidenceDot" style="width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>
+                    <span id="confirmModalConfidenceText">Confidence: 94.2%</span>
+                </div>
+                <div style="position: absolute; bottom: 12px; left: 12px; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); padding: 4px 12px; border-radius: 8px; font-size: 12px; font-weight: 800; color: #38bdf8; border: 1px solid rgba(255, 255, 255, 0.2);">
+                    📷 Gate 01 ANPR Stream
+                </div>
+            </div>
+
+            <!-- Details Grid -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; background: #f8fafc; padding: 14px; border-radius: 12px; border: 1px solid var(--border-color);">
+                <div>
+                    <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;" data-i18n="lbl_detected_plate">Detected Number Plate (Editable)</label>
+                    <input type="text" id="confirmModalPlateInput" class="form-input" style="font-size: 16px; font-weight: 900; letter-spacing: 1px; color: #1e293b; background: white; text-transform: uppercase; padding: 6px 10px; border: 2px solid var(--accent-color); border-radius: 8px;" value="WP CAB-1234">
+                </div>
+
+                <div>
+                    <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;" data-i18n="lbl_verif_vehicle_status">Vehicle & Owner Status</label>
+                    <div id="confirmModalStatusBadge" style="font-size: 13px; font-weight: 700; color: #047857; margin-top: 6px; line-height: 1.4;">
+                        🟢 Registered Vehicle
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div style="display: flex; gap: 10px; margin-top: 10px; align-items: stretch;">
+                <button id="confirmModalApproveBtn" onclick="approveDetectionConfirmModal()" class="btn-primary" style="flex: 1; background: #10b981; border-color: #10b981; font-weight: 800; min-height: 46px; height: auto; padding: 10px 12px; margin: 0; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; text-align: center; line-height: 1.35; word-break: break-word;" data-i18n="btn_confirm_grant_entrance">
+                    🟢 Confirm & Grant Entrance
+                </button>
+                <button id="confirmModalDenyBtn" onclick="denyDetectionConfirmModal()" class="btn-secondary" style="flex: 1; color: #ef4444; border-color: #ef4444; background: rgba(239, 68, 68, 0.08); font-weight: 800; min-height: 46px; height: auto; padding: 10px 12px; margin: 0; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; text-align: center; line-height: 1.35; word-break: break-word;" data-i18n="btn_deny_flag_alert">
+                    🔴 Deny / Flag Security Alert
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ADD USER MODAL -->
+<div id="addUserModal" class="modal">
+    <div class="modal-content" style="max-width: 420px; border-radius: 16px; background: white;">
+        <span class="close-btn" onclick="closeAddUserModal()">&times;</span>
+        <h2 style="margin-top: 0; font-size: 18px; font-weight: 800; color: var(--text-main);" data-i18n="add_user_title">Add System User</h2>
+        <div class="form-group">
+            <label for="newUsername" style="font-weight: 700; font-size: 12px; margin-bottom: 4px; display: block;" data-i18n="th_username">Username</label>
+            <input type="text" id="newUsername" class="form-input" placeholder="Operator username">
+        </div>
+        <div class="form-group">
+            <label for="newPassword" style="font-weight: 700; font-size: 12px; margin-bottom: 4px; display: block;" data-i18n="lbl_password">Password</label>
+            <input type="password" id="newPassword" class="form-input" placeholder="••••••••">
+        </div>
+        <div class="form-group">
+            <label for="newUserRole" style="font-weight: 700; font-size: 12px; margin-bottom: 4px; display: block;" data-i18n="th_role">Role</label>
+            <select id="newUserRole" class="form-input" style="padding: 10px; width: 100%; border-radius: 8px; border: 1px solid var(--border-color); background: white; font-weight: 600;">
+                <option value="operator" data-i18n="role_security">Operator</option>
+                <option value="admin" data-i18n="role_admin">Admin</option>
+                <option value="viewer" data-i18n="role_viewer">Viewer</option>
+            </select>
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button onclick="submitNewUser()" class="btn-primary" style="flex: 1; height: 40px;" data-i18n="btn_create_user">Create User</button>
+            <button onclick="closeAddUserModal()" class="btn-secondary" style="flex: 1; height: 40px;" data-i18n="btn_cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- ADD VEHICLE MODAL -->
+<div id="addVehicleModal" class="modal" style="z-index: 99999;">
+    <div class="modal-content" style="max-width: 460px; border-radius: 16px; background: white; padding: 24px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0,0,0,0.25);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #1e293b;" data-i18n="reg_vehicle_title">Add New Vehicle</h2>
+            <span class="close-btn" onclick="closeAddVehicleModal()" style="font-size: 22px; font-weight: bold; color: #64748b; cursor: pointer;">&times;</span>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 16px;">
+            <label for="adminAddPlateNumber" style="font-weight: 700; font-size: 13px; color: #475569; margin-bottom: 6px; display: block;" data-i18n="lbl_plate_number">Plate Number (OCR Format)</label>
+            <input type="text" id="adminAddPlateNumber" class="form-input" placeholder="e.g. KK-7066, BJE-7406, 20-2218, AIR-86097" oninput="formatPlateNumberInput(this)" style="height: 42px; border-radius: 8px; border: 1px solid #e2e8f0; width: 100%; padding: 0 14px; font-size: 13px; color: #1e293b; text-transform: uppercase; font-weight: bold; letter-spacing: 1px;">
+            <small style="display: block; margin-top: 4px; color: #64748b; font-size: 11px;">Format: 2-3 Letters/Digits - 4-5 Digits (e.g. KK-7066, GS-4650, 20-2218, BJE-7406, AIR-86097)</small>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 16px;">
+            <label for="adminAddOwnerName" style="font-weight: 700; font-size: 13px; color: #475569; margin-bottom: 6px; display: block;" data-i18n="lbl_owner_name">Owner Name</label>
+            <input type="text" id="adminAddOwnerName" class="form-input" placeholder="Owner Full Name" style="height: 42px; border-radius: 8px; border: 1px solid #e2e8f0; width: 100%; padding: 0 14px; font-size: 13px; color: #1e293b;">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 16px;">
+            <label for="adminAddOwnerId" style="font-weight: 700; font-size: 13px; color: #475569; margin-bottom: 6px; display: block;" data-i18n="lbl_owner_id">Owner ID / License ID</label>
+            <input type="text" id="adminAddOwnerId" class="form-input" placeholder="Owner ID" style="height: 42px; border-radius: 8px; border: 1px solid #e2e8f0; width: 100%; padding: 0 14px; font-size: 13px; color: #1e293b;">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 16px;">
+            <label for="adminAddVehicleModel" style="font-weight: 700; font-size: 13px; color: #475569; margin-bottom: 6px; display: block;" data-i18n="lbl_vehicle_model">Vehicle Model</label>
+            <input type="text" id="adminAddVehicleModel" class="form-input" placeholder="e.g. bently" style="height: 42px; border-radius: 8px; border: 1px solid #e2e8f0; width: 100%; padding: 0 14px; font-size: 13px; color: #1e293b;">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 16px;">
+            <label for="adminAddCategory" style="font-weight: 700; font-size: 13px; color: #475569; margin-bottom: 6px; display: block;" data-i18n="lbl_vehicle_category">Vehicle Category</label>
+            <select id="adminAddCategory" class="form-input" style="height: 42px; border-radius: 8px; border: 1px solid #e2e8f0; width: 100%; padding: 0 14px; font-size: 13px; background: white; font-weight: 500; color: #1e293b;">
+                <option value="Car" data-i18n="cat_car">Car</option>
+                <option value="Bike" data-i18n="cat_bike">Bike</option>
+                <option value="Van" data-i18n="cat_van">Van</option>
+                <option value="Bus" data-i18n="cat_bus">Bus</option>
+                <option value="Truck" data-i18n="cat_truck">Truck</option>
+            </select>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 24px;">
+            <label style="font-weight: 700; font-size: 13px; color: #475569; margin-bottom: 6px; display: block;" data-i18n="lbl_vehicle_photo">Vehicle Photo</label>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <button type="button" onclick="triggerAdminCamCapture()" class="admin-btn-outline" style="height: 38px; font-size: 12px; font-weight: 600; padding: 0 14px;">
+                    <span data-i18n="btn_open_cam">📷 Open Camera</span>
+                </button>
+                <input type="hidden" id="adminAddVehicleImage">
+                <span id="adminAddCamStatus" style="font-size: 12px; color: #64748b; font-weight: 500;">No photo attached</span>
+            </div>
+            <video id="adminWebcamVideo" style="display: none; width: 100%; max-height: 200px; margin-top: 10px; border-radius: 8px; border: 1px solid #e2e8f0;" autoplay playsinline></video>
+            <canvas id="adminWebcamCanvas" style="display: none;"></canvas>
+        </div>
+
+        <button onclick="submitAdminNewVehicle()" class="admin-btn-primary" style="width: 100%; height: 46px; justify-content: center; font-size: 14px; font-weight: 700; background: #132238; border-color: #132238;">
+            <span data-i18n="btn_save_reg">Save Vehicle Registration</span>
+        </button>
+    </div>
+</div>
+
+<!-- ADD CAMERA MODAL -->
+<div id="addCameraModal" class="modal">
+
+    <div class="modal-content" style="max-width: 440px; border-radius: 16px; background: white;">
+        <span class="close-btn" onclick="closeAddCameraModal()">&times;</span>
+        <h2 style="margin-top: 0; font-size: 18px; font-weight: 800; color: var(--text-main);" data-i18n="add_camera_title">Add ANPR Camera Feed</h2>
+        <div class="form-group">
+            <label for="newCamName" style="font-weight: 700; font-size: 12px; margin-bottom: 4px; display: block;" data-i18n="th_camera_name">Camera Name</label>
+            <input type="text" id="newCamName" class="form-input" placeholder="e.g. Cam-03 East Gate">
+        </div>
+        <div class="form-group">
+            <label for="newCamLocation" style="font-weight: 700; font-size: 12px; margin-bottom: 4px; display: block;" data-i18n="th_location">Location</label>
+            <input type="text" id="newCamLocation" class="form-input" placeholder="e.g. East Gate Entry">
+        </div>
+        <div class="form-group">
+            <label for="newCamRtsp" style="font-weight: 700; font-size: 12px; margin-bottom: 4px; display: block;" data-i18n="th_feed_url">RTSP Stream / Feed URL</label>
+            <input type="text" id="newCamRtsp" class="form-input" placeholder="rtsp://192.168.1.102:554/stream1">
+        </div>
+        <div class="form-group">
+            <label for="newCamFps" style="font-weight: 700; font-size: 12px; margin-bottom: 4px; display: block;" data-i18n="th_fps">Target FPS</label>
+            <input type="number" id="newCamFps" class="form-input" value="30">
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button onclick="submitNewCamera()" class="btn-primary" style="flex: 1; height: 40px;" data-i18n="btn_add_camera">Add Camera</button>
+            <button onclick="closeAddCameraModal()" class="btn-secondary" style="flex: 1; height: 40px;" data-i18n="btn_cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
+
 
 <!-- A. EDIT VEHICLE MODAL -->
 <div id="editModal" class="modal">
@@ -634,6 +1284,11 @@
         <h2 data-i18n="edit_vehicle_title">Edit Vehicle</h2>
         
         <input type="hidden" id="editId">
+
+        <div class="form-group">
+            <label for="editPlateNumber" data-i18n="lbl_plate_number">License Plate Number (OCR Format)</label>
+            <input type="text" id="editPlateNumber" class="form-input" placeholder="e.g. KK-7066, BJE-7406" oninput="formatPlateNumberInput(this)" style="text-transform: uppercase; font-weight: bold; letter-spacing: 1px;">
+        </div>
         
         <div class="form-group">
             <label for="editOwnerName" data-i18n="lbl_owner_name">Owner Name</label>
@@ -696,8 +1351,9 @@
         <h2 data-i18n="reg_vehicle_title">Add New Vehicle</h2>
         
         <div class="form-group">
-            <label for="regPlateNumber" data-i18n="lbl_plate_number">Plate Number</label>
-            <input type="text" id="regPlateNumber" class="form-input" placeholder="e.g. CAB1234" style="text-transform: uppercase;">
+            <label for="regPlateNumber" data-i18n="lbl_plate_number">Plate Number (OCR Format)</label>
+            <input type="text" id="regPlateNumber" class="form-input" placeholder="e.g. KK-7066, BJE-7406, 20-2218, AIR-86097" oninput="formatPlateNumberInput(this)" style="text-transform: uppercase; font-weight: bold; letter-spacing: 1px;">
+            <small style="display: block; margin-top: 4px; color: var(--text-muted); font-size: 11px;">Format: 2-3 Letters/Digits - 4-5 Digits (e.g. KK-7066, GS-4650, 20-2218, BJE-7406, AIR-86097)</small>
         </div>
 
         <div class="form-group">
@@ -756,16 +1412,33 @@
 
 <!-- C. VEHICLES REGISTRY MANAGER MODAL -->
 <div id="vehiclesManagerModal" class="modal">
-    <div class="modal-content" style="width: 800px; max-width: 90vw;">
+    <div class="modal-content" style="width: 850px; max-width: 90vw;">
         <span class="close-btn" onclick="closeVehiclesManagerModal()">&times;</span>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-            <h2 data-i18n="registry_title">Registered Vehicles Registry</h2>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-right: 35px;">
+            <h2 data-i18n="registry_title" style="margin: 0;">Registered Vehicles Registry</h2>
             <button onclick="openRegisterModal()" class="btn-secondary" style="width: auto; padding: 6px 12px; background-color: var(--accent-color); color: white; border-color: var(--accent-color);" data-i18n="btn_add_new_vehicle">
                 ➕ Add New Vehicle
             </button>
         </div>
+
+        <!-- Registry Search & Controls Bar -->
+        <div class="table-controls-bar">
+            <div class="table-search-group">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="vehicleRegistrySearchInput" class="table-search-input" placeholder="Search registered plate, owner, model...">
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 13px; color: var(--text-muted);">Rows per page:</span>
+                <select id="vehicleRegistryPageSizeSelect" class="pagination-select" onchange="changeVehicleRegistryPageSize(this.value)">
+                    <option value="10" selected>10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+        </div>
         
-        <div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px;">
+        <div class="table-scroll-container" style="max-height: 380px;">
             <table class="custom-table">
                 <thead>
                     <tr>
@@ -782,6 +1455,12 @@
                     <!-- Filled by JS -->
                 </tbody>
             </table>
+        </div>
+
+        <!-- Vehicle Registry Pagination Bar -->
+        <div class="pagination-bar">
+            <div id="vehicleRegistryPaginationInfo" class="pagination-info">Showing 0 of 0 entries</div>
+            <div id="vehicleRegistryPaginationControls" class="pagination-controls"></div>
         </div>
     </div>
 </div>
@@ -895,6 +1574,46 @@
             <button onclick="denyGuestVehicleEntry()" class="btn-secondary" style="flex: 1; color: #ef4444; border-color: #ef4444; background: rgba(239, 68, 68, 0.1); font-weight: 800; height: 42px; margin: 0; font-size: 13px;">
                 🔴 Deny & Flag Alert
             </button>
+        </div>
+    </div>
+</div>
+
+
+<!-- REAL-WORLD PARKING LAYOUT BLUEPRINT MODAL -->
+<div id="parkingLayoutModal" class="modal" style="display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.65); backdrop-filter: blur(4px);">
+    <div class="modal-content" style="background-color: #ffffff; margin: 2% auto; padding: 24px; border-radius: 16px; width: 90%; max-width: 980px; box-shadow: 0 20px 40px rgba(0,0,0,0.3); border: 1px solid #e2e8f0; position: relative;">
+        <span onclick="closeParkingLayoutModal()" style="position: absolute; right: 20px; top: 16px; font-size: 28px; font-weight: bold; color: #64748b; cursor: pointer;">&times;</span>
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+            <div style="background: rgba(37, 99, 235, 0.1); color: #2563eb; width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/></svg>
+            </div>
+            <div>
+                <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #0f172a;">Real-World Physical Parking Layout Blueprint</h2>
+                <p style="margin: 2px 0 0 0; font-size: 13px; color: #64748b;">Annotated architectural layout with bay dimensions, traffic flow, and ANPR camera mounting alignment.</p>
+            </div>
+        </div>
+        
+        <div style="border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 20px;">
+            <img src="assets/parking_layout_annotated.png" style="width: 100%; height: auto; display: block;" alt="Physical Parking Layout Blueprint">
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; font-size: 13px;">
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px;">
+                <strong style="color: #0f172a; display: block; font-size: 13px; margin-bottom: 2px;">🅿️ 4 Physical Bays</strong>
+                <span style="color: #64748b; font-size: 12px;">P1, P2, P3, P4 (2.5m x 5.0m standard)</span>
+            </div>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px;">
+                <strong style="color: #0f172a; display: block; font-size: 13px; margin-bottom: 2px;">🛣️ 6.0m Driving Aisle</strong>
+                <span style="color: #64748b; font-size: 12px;">Two-way maneuver and driving lane</span>
+            </div>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px;">
+                <strong style="color: #0f172a; display: block; font-size: 13px; margin-bottom: 2px;">🛡️ Safety Clearance</strong>
+                <span style="color: #64748b; font-size: 12px;">0.8m fence buffer + 1.5m tree buffer</span>
+            </div>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px;">
+                <strong style="color: #0f172a; display: block; font-size: 13px; margin-bottom: 2px;">🎥 ANPR Cam-01</strong>
+                <span style="color: #64748b; font-size: 12px;">Elevated 3.5m wide-angle optical line</span>
+            </div>
         </div>
     </div>
 </div>

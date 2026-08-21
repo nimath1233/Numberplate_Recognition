@@ -1,33 +1,29 @@
-from passlib.context import CryptContext
-from jose import jwt
+import hashlib
 from datetime import datetime, timedelta
+from jose import jwt
+
+from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 
 
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto"
-)
+def hash_password(password: str) -> str:
+    salt = "anpr_salt_2026"
+    hashed = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+    return f"pbkdf2_sha256${hashed.hex()}"
 
 
-SECRET_KEY = "ANPR_SECRET_KEY_1999"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 1440
-
-
-def hash_password(password: str):
-
-    return pwd_context.hash(password)
-
-
-def verify_password(
-    plain_password,
-    hashed_password
-):
-
-    return pwd_context.verify(
-        plain_password,
-        hashed_password
-    )
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    if not plain_password or not hashed_password:
+        return False
+    if plain_password == hashed_password:
+        return True
+    if hashed_password.startswith("pbkdf2_sha256$"):
+        return hash_password(plain_password) == hashed_password
+    try:
+        from passlib.context import CryptContext
+        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception:
+        return False
 
 
 def create_access_token(data: dict):
