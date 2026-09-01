@@ -96,6 +96,7 @@ const translations = {
         cat_bus: "Bus",
         cat_car: "Car",
         cat_truck: "Truck",
+        cat_tuktuk: "Tuk Tuk",
         cat_van: "Van",
         choose_vehicle: "-- Choose Vehicle --",
         confirm_clear_all_alerts: "Are you sure you want to clear ALL security alerts?",
@@ -371,6 +372,7 @@ const translations = {
         cat_bus: "බස් රථ",
         cat_car: "මෝටර් රථ",
         cat_truck: "ලොරි / ට්‍රක්",
+        cat_tuktuk: "ත්‍රිරෝද රථ / Tuk Tuk",
         cat_van: "වෑන් රථ",
         choose_vehicle: "-- වාහනය තෝරන්න --",
         confirm_clear_all_alerts: "සියලුම ආරක්ෂක සංඥා මකා දැමීමට ඔබට සහතිකද?",
@@ -646,6 +648,7 @@ const translations = {
         cat_bus: "பேருந்து",
         cat_car: "கார்",
         cat_truck: "லாரி / டிரக்",
+        cat_tuktuk: "ஆட்டோ / Tuk Tuk",
         cat_van: "வேன்",
         choose_vehicle: "-- வாகனத்தை தேர்வுசெய்க --",
         confirm_clear_all_alerts: "அனைத்து பாதுகாப்பு எச்சரிக்கைகளையும் நிச்சயமாக நீக்க விரும்புகிறீர்களா?",
@@ -1030,6 +1033,7 @@ function initWebSocket() {
                     const data = payload.data || {};
                     // If flagged or alert, reload alerts dynamically and trigger siren
                     if (data.status === "Flagged" || payload.event === "DETECTION_ALERT") {
+                        if (typeof triggerSecuritySiren === "function") triggerSecuritySiren();
                         if (typeof loadAlerts === "function") loadAlerts();
                     }
 
@@ -1050,6 +1054,13 @@ function initWebSocket() {
                         }
                     } else {
                         if (typeof loadAlerts === "function") loadAlerts();
+                    }
+                } else if (payload.event === "ALERT_DELETED" || payload.event === "ALERTS_CLEARED" || payload.event === "DETECTION_LOG_DELETED" || payload.event === "DETECTION_LOGS_CLEARED") {
+                    if (typeof loadAlerts === "function") loadAlerts();
+                    if (typeof loadDashboardData === "function") loadDashboardData();
+                    const activeMenu = document.querySelector(".menu-item.active");
+                    if (activeMenu && activeMenu.id === "menu-records" && typeof loadRecords === "function") {
+                        loadRecords(currentRecordFilter || 'all');
                     }
                 }
             } catch (e) {
@@ -1102,6 +1113,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Connect Real-Time WebSocket for immediate live alert push
     initWebSocket();
+
+    // Populate camera source devices (DroidCam, built-in, etc.)
+    populateCameraDeviceList();
+
+    // Pre-fetch active alerts badge count
+    loadAlerts();
 
     // Default Load Overview Tab
     switchTab("dashboard");
@@ -1192,6 +1209,8 @@ function switchAdminSubtab(subtabId) {
         loadAdminAnalytics();
     } else if (subtabId === "audit") {
         loadAdminAuditLogs();
+    } else if (subtabId === "controls") {
+        loadAIEngineStatus();
     }
 }
 
@@ -1432,10 +1451,10 @@ async function loadAdminAnalytics() {
         adminCatChartInstance = new Chart(catCtx, {
             type: 'doughnut',
             data: {
-                labels: ['Cars', 'Bikes', 'Vans', 'Buses', 'Trucks'],
+                labels: ['Cars', 'Tuk Tuks', 'Bikes', 'Vans', 'Buses', 'Trucks'],
                 datasets: [{
-                    data: [12, 5, 4, 2, 1],
-                    backgroundColor: ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444']
+                    data: [12, 4, 5, 4, 2, 1],
+                    backgroundColor: ['#2563eb', '#16a34a', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444']
                 }]
             },
             options: { responsive: true, maintainAspectRatio: false }
@@ -1948,6 +1967,132 @@ function triggerGateOverride() {
 }
 
 
+// ================= AI ENGINE HARDWARE ACCELERATION CONTROLS (CPU / GPU) =================
+async function loadAIEngineStatus() {
+    try {
+        const data = await adminAPI.getAIEngineStatus();
+        if (!data) return;
+
+        // 1. Telemetry Banner
+        const gpuNameEl = document.getElementById("aiEngineGpuName");
+        const cudaStatusEl = document.getElementById("aiEngineCudaStatus");
+        const vramEl = document.getElementById("aiEngineVram");
+
+        const cudaAvail = data.system && data.system.cuda_available;
+        const gpuName = (data.system && data.system.gpu_name) || "No dedicated GPU detected";
+        const vram = (data.system && data.system.vram_mb) || 0.0;
+
+        if (gpuNameEl) gpuNameEl.innerText = gpuName;
+        if (cudaStatusEl) {
+            cudaStatusEl.innerText = cudaAvail ? "Active (CUDA)" : "Unavailable";
+            cudaStatusEl.style.color = cudaAvail ? "#10b981" : "#ef4444";
+        }
+        if (vramEl) vramEl.innerText = `${vram} MB`;
+
+        // 2. YOLO Status & Buttons
+        const yolo = data.yolo || {};
+        const isYoloGpu = yolo.is_gpu || (yolo.device && yolo.device.includes("cuda"));
+        const yoloBadge = document.getElementById("aiYoloActiveBadge");
+        const btnYoloGpu = document.getElementById("btnYoloGpu");
+        const btnYoloCpu = document.getElementById("btnYoloCpu");
+
+        if (yoloBadge) {
+            yoloBadge.innerText = yolo.device_name || (isYoloGpu ? "CUDA GPU" : "CPU");
+            yoloBadge.style.background = isYoloGpu ? "#ecfdf5" : "#f1f5f9";
+            yoloBadge.style.color = isYoloGpu ? "#059669" : "#475569";
+            yoloBadge.style.border = isYoloGpu ? "1px solid #a7f3d0" : "1px solid #cbd5e1";
+        }
+
+        if (btnYoloGpu && btnYoloCpu) {
+            if (isYoloGpu) {
+                btnYoloGpu.style.background = "#3b82f6";
+                btnYoloGpu.style.color = "#ffffff";
+                btnYoloGpu.style.borderColor = "#3b82f6";
+                btnYoloCpu.style.background = "#f8fafc";
+                btnYoloCpu.style.color = "#475569";
+                btnYoloCpu.style.borderColor = "#cbd5e1";
+            } else {
+                btnYoloCpu.style.background = "#3b82f6";
+                btnYoloCpu.style.color = "#ffffff";
+                btnYoloCpu.style.borderColor = "#3b82f6";
+                btnYoloGpu.style.background = "#f8fafc";
+                btnYoloGpu.style.color = "#475569";
+                btnYoloGpu.style.borderColor = "#cbd5e1";
+            }
+        }
+
+        // 3. OCR Status & Buttons
+        const ocr = data.ocr || {};
+        const isOcrGpu = ocr.is_gpu || ocr.device === "gpu";
+        const ocrBadge = document.getElementById("aiOcrActiveBadge");
+        const btnOcrGpu = document.getElementById("btnOcrGpu");
+        const btnOcrCpu = document.getElementById("btnOcrCpu");
+
+        if (ocrBadge) {
+            ocrBadge.innerText = ocr.device_name || (isOcrGpu ? "Paddle GPU" : "Intel oneDNN CPU");
+            ocrBadge.style.background = isOcrGpu ? "#ecfdf5" : "#eff6ff";
+            ocrBadge.style.color = isOcrGpu ? "#059669" : "#2563eb";
+            ocrBadge.style.border = isOcrGpu ? "1px solid #a7f3d0" : "1px solid #bfdbfe";
+        }
+
+        if (btnOcrGpu && btnOcrCpu) {
+            if (isOcrGpu) {
+                btnOcrGpu.style.background = "#3b82f6";
+                btnOcrGpu.style.color = "#ffffff";
+                btnOcrGpu.style.borderColor = "#3b82f6";
+                btnOcrCpu.style.background = "#f8fafc";
+                btnOcrCpu.style.color = "#475569";
+                btnOcrCpu.style.borderColor = "#cbd5e1";
+            } else {
+                btnOcrCpu.style.background = "#3b82f6";
+                btnOcrCpu.style.color = "#ffffff";
+                btnOcrCpu.style.borderColor = "#3b82f6";
+                btnOcrGpu.style.background = "#f8fafc";
+                btnOcrGpu.style.color = "#475569";
+                btnOcrGpu.style.borderColor = "#cbd5e1";
+            }
+        }
+    } catch (err) {
+        console.warn("Failed to load AI Engine status:", err);
+    }
+}
+
+async function switchYoloDevice(targetDevice, engine) {
+    try {
+        const payload = {
+            yolo_device: targetDevice,
+            yolo_engine: engine
+        };
+        const res = await adminAPI.updateAIEngineConfig(payload);
+        if (res && res.result && res.result.yolo && res.result.yolo.success === false) {
+            alert(`⚠️ YOLO Device Switch Warning: ${res.result.yolo.error}`);
+        } else {
+            alert(`✅ YOLO Detector switched to ${targetDevice === "cpu" ? "CPU (OpenVINO)" : "GPU (CUDA)"} successfully!`);
+        }
+        await loadAIEngineStatus();
+    } catch (err) {
+        alert("Failed to switch YOLO device: " + err.message);
+    }
+}
+
+async function switchOcrDevice(targetDevice) {
+    try {
+        const payload = {
+            ocr_device: targetDevice
+        };
+        const res = await adminAPI.updateAIEngineConfig(payload);
+        if (res && res.result && res.result.ocr && res.result.ocr.success === false) {
+            alert(`⚠️ OCR Device Switch Note: ${res.result.ocr.error}`);
+        } else {
+            alert(`✅ OCR Recognizer switched to ${targetDevice === "cpu" ? "CPU (Intel oneDNN)" : "GPU (CUDA)"} successfully!`);
+        }
+        await loadAIEngineStatus();
+    } catch (err) {
+        alert("Failed to switch OCR device: " + err.message);
+    }
+}
+
+
 // ================= LOGOUT =================
 function logout() {
     localStorage.removeItem("token");
@@ -2081,6 +2226,7 @@ async function loadOccupancyAnalytics() {
             const cc = data.category_counts || {};
             const cats = [
                 { name: 'Car', count: cc.Car || 0, color: '#2563eb', bg: 'rgba(37, 99, 235, 0.08)', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>' },
+                { name: 'Tuk Tuk', count: (cc['Tuk Tuk'] || cc.TukTuk || cc.TUKTUK || 0), color: '#16a34a', bg: 'rgba(22, 163, 74, 0.08)', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16l2.5-7.5A2 2 0 0 1 9.4 7H18a2 2 0 0 1 2 2v6H5"/><path d="M10 7v6h9"/><path d="M2 13h3"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>' },
                 { name: 'Bike', count: cc.Bike || 0, color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.08)', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6h2a2 2 0 0 1 2 2v2"/><path d="M12 17.5V14l-3-3 4-3 2 3h3"/></svg>' },
                 { name: 'Van', count: cc.Van || 0, color: '#0ea5e9', bg: 'rgba(14, 165, 233, 0.08)', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="18" height="11" rx="2"/><circle cx="6" cy="17" r="2"/><circle cx="15" cy="17" r="2"/><path d="M19 10h4l-1.5 5H19"/></svg>' },
                 { name: 'Bus', count: cc.Bus || 0, color: '#ef4444', bg: 'rgba(239, 68, 68, 0.08)', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="16" rx="2"/><path d="M4 11h16"/><path d="M8 15h.01"/><path d="M16 15h.01"/><path d="M6 19v2"/><path d="M18 19v2"/></svg>' },
@@ -2187,6 +2333,7 @@ function renderCategoryDistChart(counts) {
 
     const categories = [
         { key: 'Car', label: 'Car', icon: '🚘', color: '#2563eb' },
+        { key: 'Tuk Tuk', label: 'Tuk Tuk', icon: '🛺', color: '#16a34a' },
         { key: 'Truck', label: 'Truck', icon: '🚚', color: '#d97706' },
         { key: 'Van', label: 'Van', icon: '🚐', color: '#0ea5e9' },
         { key: 'Bike', label: 'Bike', icon: '🏍️', color: '#10b981' },
@@ -2410,6 +2557,7 @@ let isAutoLiveScanEnabled = true;
 let isScanInProgress = false;
 let currentScanAbortController = null;
 let scanWatchdogTimer = null;
+let currentCameraSessionId = 0;
 let lastLiveScannedPlate = "";
 let lastLiveScanTimestamp = 0;
 let autoScanPlateBuffer = {
@@ -2532,7 +2680,45 @@ function scheduleNextAutoScan(delay = 100) {
     }, delay);
 }
 
+async function populateCameraDeviceList() {
+    try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(d => d.kind === "videoinput");
+        const select = document.getElementById("cameraDeviceSelect");
+        if (!select) return;
+
+        const currentVal = select.value;
+        select.innerHTML = `<option value="">🎥 Auto Detect / Default Camera</option>`;
+        
+        videoDevices.forEach((device, index) => {
+            const opt = document.createElement("option");
+            opt.value = device.deviceId;
+            opt.innerText = device.label || `Camera ${index + 1} (${device.deviceId.slice(0, 8)}...)`;
+            if (device.label && (device.label.toLowerCase().includes("droidcam") || device.label.toLowerCase().includes("iriun"))) {
+                opt.innerText = "📱 " + opt.innerText;
+            }
+            select.appendChild(opt);
+        });
+
+        if (currentVal && Array.from(select.options).some(o => o.value === currentVal)) {
+            select.value = currentVal;
+        }
+    } catch (e) {
+        console.warn("Could not enumerate camera devices:", e);
+    }
+}
+
+async function onCameraDeviceChanged() {
+    if (webcamStream) {
+        stopCamera();
+        await startCamera();
+    }
+}
+
 async function startCamera() {
+    currentCameraSessionId++;
+    const thisSession = currentCameraSessionId;
     const video = document.getElementById("webcamFeed");
     try {
         // Hard reset in-flight state before starting
@@ -2546,10 +2732,22 @@ async function startCamera() {
         }
         isScanInProgress = false;
 
-        webcamStream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+        const select = document.getElementById("cameraDeviceSelect");
+        const selectedDeviceId = select ? select.value : "";
+
+        const videoConstraints = selectedDeviceId
+            ? { deviceId: { exact: selectedDeviceId } }
+            : true;
+
+        webcamStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
+        
+        // Refresh device labels once permission is granted
+        populateCameraDeviceList();
+
         if (video) {
             video.srcObject = webcamStream;
             video.onloadedmetadata = () => {
+                if (currentCameraSessionId !== thisSession) return;
                 video.play().catch(() => {});
                 console.log("Camera ready:", video.videoWidth, "x", video.videoHeight);
                 if (isAutoLiveScanEnabled) {
@@ -2570,6 +2768,7 @@ async function startCamera() {
 }
 
 function stopCamera() {
+    currentCameraSessionId++;
     // 1. Abort any in-flight backend request
     if (currentScanAbortController) {
         try { currentScanAbortController.abort(); } catch (e) {}
@@ -2618,6 +2817,8 @@ async function scanCurrentFrame(isAutoScan = false) {
         return;
     }
 
+    const thisSessionId = currentCameraSessionId;
+
     const ctx = canvas.getContext("2d");
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -2628,18 +2829,18 @@ async function scanCurrentFrame(isAutoScan = false) {
     // Create fresh AbortController for this frame request
     currentScanAbortController = new AbortController();
 
-    // Setup 12-second watchdog timer to release lock if request hangs
+    // Safe generous 180-second watchdog timer to avoid premature abort on heavy CPU load
     if (scanWatchdogTimer) clearTimeout(scanWatchdogTimer);
     scanWatchdogTimer = setTimeout(() => {
-        if (isScanInProgress) {
-            console.warn("Scan watchdog: Request took over 12s, releasing lock and aborting.");
+        if (isScanInProgress && currentCameraSessionId === thisSessionId) {
+            console.warn("Scan watchdog: Request exceeded 180s timeout, releasing lock.");
             if (currentScanAbortController) {
                 try { currentScanAbortController.abort(); } catch (e) {}
                 currentScanAbortController = null;
             }
             isScanInProgress = false;
         }
-    }, 12000);
+    }, 180000);
 
     // Convert canvas to high-quality JPEG Blob
     canvas.toBlob(async (blob) => {
@@ -2676,9 +2877,21 @@ async function scanCurrentFrame(isAutoScan = false) {
                 signal: currentScanAbortController ? currentScanAbortController.signal : undefined
             });
 
+            // Guard against results returning after camera was stopped or switched
+            if (currentCameraSessionId !== thisSessionId || !webcamStream) {
+                console.log("Discarding scan result from inactive/previous camera session.");
+                return;
+            }
+
             if (!response.ok) throw new Error("Plate Scan failed");
             
             const data = await response.json();
+
+            // Guard against results parsed after session changed
+            if (currentCameraSessionId !== thisSessionId || !webcamStream) {
+                console.log("Discarding scan result from inactive/previous camera session.");
+                return;
+            }
             
             const detectedPlate = data.recognized_plate || data.raw_plate;
             const rawPlateClean = String(detectedPlate || '').replace(/[\s\-_]/g, '');
@@ -2687,7 +2900,7 @@ async function scanCurrentFrame(isAutoScan = false) {
             const isDetected = Boolean(data.detected === true) && hasBbox && rawPlateClean.length >= 4 && data.valid === true && confidence >= 70;
             const displayPlate = detectedPlate ? detectedPlate : "PLATE DETECTED";
             const category = data.plate_category || (isDetected ? "Standard" : "N/A");
-            const status = isDetected ? (data.status || (data.found ? "Allowed" : "Flagged")) : "No-Plate";
+            const status = isDetected ? (data.status || (data.found ? "Allowed" : "Pending Verification")) : "No-Plate";
             const owner = data.vehicle ? data.vehicle.owner_name : (isDetected ? "Unregistered" : "N/A");
             const isRegistered = Boolean((data.found === true || data.is_registered === true) && status === "Allowed" && (!data.vehicle || !data.vehicle.is_guest));
             const parkingInfo = data.parking_slot ? ` | Slot: <b>${data.parking_slot}</b>` : (data.parking_message ? ` | <i>${data.parking_message}</i>` : "");
@@ -2695,8 +2908,8 @@ async function scanCurrentFrame(isAutoScan = false) {
             const timestamp = new Date().toLocaleTimeString();
             const logBody = document.getElementById("liveCameraLogBody");
             
-            const borderColor = status === 'Allowed' ? 'var(--success-color)' : (isDetected ? 'var(--danger-color)' : 'var(--text-muted)');
-            const badgeClass = status === 'Allowed' ? 'allowed' : (isDetected ? 'flagged' : 'pending');
+            const borderColor = status === 'Allowed' ? 'var(--success-color)' : (status === 'Flagged' ? 'var(--danger-color)' : '#f59e0b');
+            const badgeClass = status === 'Allowed' ? 'allowed' : (status === 'Flagged' ? 'flagged' : 'pending');
 
             const now = Date.now();
 
@@ -2722,25 +2935,43 @@ async function scanCurrentFrame(isAutoScan = false) {
                     ` + logBody.innerHTML;
                 }
             } else {
-                // Real YOLO BBox overlay displayed immediately
-                drawDetectionOverlay(data.bbox, displayPlate, confidence, status);
+                const isConfirmedResult = data.is_confirmed !== false;
+                const consensusState = data.consensus_state || (isConfirmedResult ? 'confirmed' : 'voting');
+                const overlayLabel = !isConfirmedResult ? `[Voting ${data.agreeing_frames || 1}/${data.voting_frames || 2}] ${displayPlate}` : displayPlate;
+
+                // Real YOLO BBox overlay displayed immediately with consensus indicator
+                drawDetectionOverlay(data.bbox, overlayLabel, confidence, status);
 
                 // Auto populate manual check input if empty or updated
                 const manualInput = document.querySelector('input[placeholder*="ENTER OR SCAN LICENSE PLATE"]');
-                if (manualInput) {
+                if (manualInput && isConfirmedResult) {
                     manualInput.value = displayPlate;
                 }
 
                 const isDuplicate = Boolean(data.is_duplicate === true);
                 const isParked = Boolean(data.is_parked === true);
                 const inTransitBuffer = Boolean(data.in_transit_buffer === true);
+                const inExitCooldown = Boolean(data.in_exit_cooldown === true || data.action_type === "exit_cooldown");
+                const exitCdRem = data.exit_cooldown_remaining_sec || 0;
                 const mode = getVerificationMode();
 
                 let logStatusText = status;
                 let logBadgeClass = badgeClass;
                 let logBorderColor = borderColor;
 
-                if (mode === "strict") {
+                if (!isConfirmedResult) {
+                    logStatusText = `Voting (${data.agreeing_frames || 1}/${data.voting_frames || 2})`;
+                    logBadgeClass = "pending";
+                    logBorderColor = "#3b82f6";
+                } else if (inExitCooldown) {
+                    logStatusText = "Transit Cooldown";
+                    logBadgeClass = "pending";
+                    logBorderColor = "#f59e0b";
+                } else if (!isRegistered && !isParked) {
+                    logStatusText = "Pending Verification";
+                    logBadgeClass = "pending";
+                    logBorderColor = "#f59e0b";
+                } else if (mode === "strict") {
                     logStatusText = isParked ? "Strict: Exit Check" : "Strict: Entry Check";
                     logBadgeClass = "pending";
                     logBorderColor = "#f59e0b";
@@ -2756,7 +2987,18 @@ async function scanCurrentFrame(isAutoScan = false) {
                     }
                 }
 
-                if (!isDuplicate) {
+                // Multi-frame temporal consensus tracking
+                if (autoScanPlateBuffer.plate === displayPlate && (now - autoScanPlateBuffer.lastDetectedTime) < 30000) {
+                    autoScanPlateBuffer.count++;
+                } else {
+                    autoScanPlateBuffer.plate = displayPlate;
+                    autoScanPlateBuffer.count = 1;
+                }
+                autoScanPlateBuffer.lastDetectedTime = now;
+
+                const hasConsensus = isConfirmedResult && (!isAutoScan || isRegistered || autoScanPlateBuffer.count >= 2);
+
+                if (!isDuplicate && isConfirmedResult) {
                     lastLiveScannedPlate = displayPlate;
                     lastLiveScanTimestamp = Date.now();
 
@@ -2776,7 +3018,7 @@ async function scanCurrentFrame(isAutoScan = false) {
                         </div>
                     ` + logBody.innerHTML;
 
-                    if (status === "Flagged" && mode !== "strict") {
+                    if (status === "Flagged" && mode !== "strict" && hasConsensus) {
                         triggerSecuritySiren();
                         if (typeof loadAlerts === "function") {
                             loadAlerts();
@@ -2822,7 +3064,10 @@ async function scanCurrentFrame(isAutoScan = false) {
                         }
                     } else {
                         // Arriving vehicle:
-                        if (mode === "strict") {
+                        if (inExitCooldown) {
+                            // Vehicle in post-exit cooldown (< 60s since exit) -> DO NOT auto-admit or prompt entrance
+                            shouldPromptVerification = false;
+                        } else if (mode === "strict") {
                             // Strict Mode: ALWAYS prompt entrance verification modal for every arriving vehicle
                             shouldPromptVerification = true;
                         } else if (mode === "smart") {
@@ -2847,6 +3092,8 @@ async function scanCurrentFrame(isAutoScan = false) {
                         owner_name: owner,
                         is_parked: isParked,
                         in_transit_buffer: inTransitBuffer,
+                        in_exit_cooldown: inExitCooldown,
+                        exit_cooldown_remaining_sec: exitCdRem,
                         stay_seconds: data.stay_seconds !== undefined ? data.stay_seconds : (inTransitBuffer ? 0 : 999),
                         transit_remaining_sec: data.transit_remaining_sec || 0,
                         parking_slot: data.parking_slot || null
@@ -2855,6 +3102,9 @@ async function scanCurrentFrame(isAutoScan = false) {
             }
 
         } catch (err) {
+            if (currentCameraSessionId !== thisSessionId) {
+                return;
+            }
             if (err.name === "AbortError") {
                 console.log("Scan frame request aborted.");
             } else {
@@ -2869,7 +3119,9 @@ async function scanCurrentFrame(isAutoScan = false) {
             currentScanAbortController = null;
             isScanInProgress = false;
             // Schedule the NEXT frame scan only after current request is completed (one-frame-at-a-time)
-            if (isAutoScan && isAutoLiveScanEnabled && webcamStream) {
+            const confirmModal = document.getElementById("detectionConfirmModal");
+            const isModalOpen = confirmModal && (confirmModal.style.display === "flex" || confirmModal.style.display === "block");
+            if (isAutoScan && isAutoLiveScanEnabled && webcamStream && currentCameraSessionId === thisSessionId && !isModalOpen) {
                 scheduleNextAutoScan(100);
             }
         }
@@ -3382,6 +3634,9 @@ async function deleteVehicle(vehicleId) {
 
 // ================= DETECTION RECORDS DB & FILTERS =================
 let allRecords = [];
+let currentDetectionFilter = 'all';
+let detectionCurrentPage = 1;
+let detectionPageSize = 10;
 
 async function loadRecords(filterType = 'all') {
     try {
@@ -3391,68 +3646,133 @@ async function loadRecords(filterType = 'all') {
         if (!response.ok) throw new Error("Logs load failed");
         
         allRecords = await response.json();
-        renderRecordsTable(filterType);
+        filterRecords(filterType);
     } catch (err) {
         console.error("Load records error:", err);
     }
 }
 
-function renderRecordsTable(filterType = 'all') {
+function filterRecords(filterType) {
+    if (filterType) {
+        currentDetectionFilter = filterType;
+        detectionCurrentPage = 1;
+        ['all', 'allowed', 'flagged', 'denied'].forEach(ft => {
+            const btn = document.getElementById(`filter-${ft}`);
+            if (btn) {
+                if (ft === currentDetectionFilter) {
+                    btn.classList.add('active');
+                    btn.style.backgroundColor = 'var(--accent-color)';
+                    btn.style.color = 'white';
+                    btn.style.borderColor = 'var(--accent-color)';
+                } else {
+                    btn.classList.remove('active');
+                    btn.style.backgroundColor = '';
+                    btn.style.color = '';
+                    btn.style.borderColor = '';
+                }
+            }
+        });
+    }
+    renderRecordsTable(currentDetectionFilter);
+}
+
+function renderRecordsTable(filterType = currentDetectionFilter) {
     const tbody = document.getElementById("recordsTableBody");
+    if (!tbody) return;
     tbody.innerHTML = "";
 
-    let filtered = allRecords;
+    let filtered = Array.isArray(allRecords) ? allRecords : [];
     if (filterType === 'allowed') {
-        filtered = allRecords.filter(r => r.status.toLowerCase() === 'allowed');
+        filtered = filtered.filter(r => (r.status || "").toLowerCase() === 'allowed');
     } else if (filterType === 'flagged') {
-        filtered = allRecords.filter(r => r.status.toLowerCase() === 'flagged');
+        filtered = filtered.filter(r => (r.status || "").toLowerCase() === 'flagged');
     } else if (filterType === 'denied') {
-        filtered = allRecords.filter(r => r.status.toLowerCase() === 'flagged' || r.status.toLowerCase() === 'denied');
+        filtered = filtered.filter(r => (r.status || "").toLowerCase() === 'flagged' || (r.status || "").toLowerCase() === 'denied');
     }
 
-    if (filtered.length === 0) {
-        const noRecordsMsg = translations[currentLang].no_records_msg || "No records matching filter";
-        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 20px; color: var(--text-muted);">${noRecordsMsg}</td></tr>`;
-        return;
+    const searchInput = document.getElementById("detectionSearchInput");
+    const q = searchInput ? searchInput.value.trim().toLowerCase() : "";
+    const cleanQ = q.replace(/[\s\-_]/g, "");
+
+    if (cleanQ) {
+        filtered = filtered.filter(log => {
+            const plate = (log.plate_number || "").toLowerCase().replace(/[\s\-_]/g, "");
+            const owner = (log.owner_name || "").toLowerCase().replace(/[\s\-_]/g, "");
+            const model = (log.vehicle_model || "").toLowerCase().replace(/[\s\-_]/g, "");
+            const logId = String(log.id || "");
+            return plate.includes(cleanQ) || owner.includes(cleanQ) || model.includes(cleanQ) || logId.includes(cleanQ);
+        });
     }
 
-    filtered.forEach(log => {
-        const statusLower = log.status.toLowerCase();
-        let badgeClass = "allowed";
-        if (statusLower === "flagged") badgeClass = "flagged";
-        else if (statusLower === "denied") badgeClass = "denied";
+    const total = filtered.length;
+    const totalPages = Math.ceil(total / detectionPageSize) || 1;
+    if (detectionCurrentPage > totalPages) detectionCurrentPage = totalPages;
+    if (detectionCurrentPage < 1) detectionCurrentPage = 1;
 
-        const localizedStatus = translations[currentLang][`status_${statusLower}`] || log.status;
-        const deleteText = translations[currentLang].btn_delete || 'Delete';
+    const startIdx = (detectionCurrentPage - 1) * detectionPageSize;
+    const pageRecords = filtered.slice(startIdx, startIdx + detectionPageSize);
 
-        tbody.innerHTML += `
-            <tr>
-                <td>#D-${log.id}</td>
-                <td><span class="plate-tag">${log.plate_number}</span></td>
-                <td>${log.detection_time}</td>
-                <td>Cam-01 North Gate</td>
-                <td>${log.vehicle_model || "N/A"}</td>
-                <td>
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <span>${log.confidence}%</span>
-                        <div class="confidence-bar-container">
-                            <div class="confidence-bar" style="width: ${log.confidence}%;"></div>
+    if (pageRecords.length === 0) {
+        const noRecordsMsg = (translations[currentLang] && translations[currentLang].no_records_msg) || "No records matching filter";
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 25px; color: var(--text-muted);">${noRecordsMsg}</td></tr>`;
+    } else {
+        tbody.innerHTML = pageRecords.map(log => {
+            const statusLower = (log.status || "").toLowerCase();
+            let badgeClass = "allowed";
+            if (statusLower === "flagged") badgeClass = "flagged";
+            else if (statusLower === "denied") badgeClass = "denied";
+
+            const localizedStatus = (translations[currentLang] && translations[currentLang][`status_${statusLower}`]) || log.status;
+            const deleteText = (translations[currentLang] && translations[currentLang].btn_delete) || 'Delete';
+
+            return `
+                <tr>
+                    <td>#D-${log.id}</td>
+                    <td><span class="plate-tag">${log.plate_number}</span></td>
+                    <td>${log.detection_time}</td>
+                    <td>Cam-01 North Gate</td>
+                    <td>${log.vehicle_model || "N/A"}</td>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span>${log.confidence}%</span>
+                            <div class="confidence-bar-container">
+                                <div class="confidence-bar" style="width: ${log.confidence}%;"></div>
+                            </div>
                         </div>
-                    </div>
-                </td>
-                <td>
-                    <span class="status-badge ${badgeClass}">
-                        <div class="status-dot-small"></div>
-                        ${localizedStatus}
-                    </span>
-                </td>
-                <td>${log.owner_name}</td>
-                <td>
-                    <button class="btn-action-delete" onclick="deleteLog(${log.id})" style="padding: 4px 8px; font-size: 11px;">${deleteText}</button>
-                </td>
-            </tr>
-        `;
-    });
+                    </td>
+                    <td>
+                        <span class="status-badge ${badgeClass}">
+                            <div class="status-dot-small"></div>
+                            ${localizedStatus}
+                        </span>
+                    </td>
+                    <td>${log.owner_name || "-"}</td>
+                    <td>
+                        <button class="btn-action-delete" onclick="deleteLog(${log.id})" style="padding: 4px 8px; font-size: 11px;">${deleteText}</button>
+                    </td>
+                </tr>
+            `;
+        }).join("");
+    }
+
+    const infoEl = document.getElementById("detectionPaginationInfo");
+    if (infoEl) {
+        const endIdx = Math.min(startIdx + detectionPageSize, total);
+        infoEl.innerText = total > 0 ? `Showing ${startIdx + 1} to ${endIdx} of ${total} entries` : `Showing 0 of 0 entries`;
+    }
+
+    renderPaginationControlsHelper("detectionPaginationControls", detectionCurrentPage, totalPages, "goToDetectionPage");
+}
+
+function changeDetectionPageSize(val) {
+    detectionPageSize = parseInt(val, 10) || 10;
+    detectionCurrentPage = 1;
+    renderRecordsTable(currentDetectionFilter);
+}
+
+function goToDetectionPage(p) {
+    detectionCurrentPage = p;
+    renderRecordsTable(currentDetectionFilter);
 }
 
 async function deleteLog(logId) {
@@ -3564,14 +3884,14 @@ function closeVehiclesManagerModal() {
 // ================= SECURITY ALERTS LOGS =================
 async function loadAlerts() {
     try {
-        const response = await fetch(API_URL + "/alerts", {
-            headers: { "Authorization": "Bearer " + token }
-        });
+        const curToken = localStorage.getItem("token");
+        const headers = curToken ? { "Authorization": "Bearer " + curToken } : {};
+        const response = await fetch(API_URL + "/alerts", { headers });
         if (!response.ok) throw new Error("Alerts load failed");
 
         const alerts = await response.json();
         const tbody = document.getElementById("alertsTableBody");
-        tbody.innerHTML = "";
+        if (tbody) tbody.innerHTML = "";
 
         // Update sidebar red alerts badge
         const badge = document.getElementById("alerts-badge");
@@ -3585,24 +3905,33 @@ async function loadAlerts() {
             }
         }
 
+        if (!tbody) return;
+
         if (!alerts || alerts.length === 0) {
             const noAlertsMsg = (translations[currentLang] && translations[currentLang].no_alerts_msg) ? translations[currentLang].no_alerts_msg : 'No active security alerts';
-            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 30px; color: var(--text-muted);">${noAlertsMsg}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 30px; color: var(--text-muted); font-size: 13px;">${noAlertsMsg}</td></tr>`;
             return;
         }
 
         alerts.forEach(alert => {
-            const time = new Date(alert.alert_time).toLocaleTimeString();
-            const deleteText = translations[currentLang].btn_delete || 'Delete';
+            const time = alert.alert_time ? new Date(alert.alert_time).toLocaleString() : 'N/A';
+            const deleteText = (translations[currentLang] && translations[currentLang].btn_delete) ? translations[currentLang].btn_delete : 'Delete';
+            const snapUrl = alert.snapshot ? resolveSnapshotUrl(alert.snapshot) : null;
+            const snapHtml = snapUrl ? `
+                <div style="display: inline-flex; align-items: center; gap: 6px;">
+                    <img src="${snapUrl}" alt="Vehicle" style="width: 54px; height: 38px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border-color); cursor: pointer; background: #000;" onclick="previewVehicleImage('${snapUrl}')" title="Click to enlarge" onerror="this.onerror=null; this.outerHTML='<span style=\\'font-size:11px;color:var(--text-muted);\\'>${alert.snapshot}</span>'" />
+                </div>
+            ` : '<span style="color: var(--text-muted); font-size: 11px;">No Snapshot</span>';
+
             tbody.innerHTML += `
                 <tr>
-                    <td>#AL-${alert.id}</td>
-                    <td><span class="plate-tag" style="background-color: var(--danger-color);">${alert.plate_number}</span></td>
-                    <td>${time}</td>
-                    <td style="color: var(--danger-color); font-weight: 600;">${alert.reason}</td>
-                    <td>${alert.snapshot || 'N/A'}</td>
+                    <td><strong>#AL-${alert.id}</strong></td>
+                    <td><span class="plate-tag" style="background-color: var(--danger-color); color: white;">${alert.plate_number}</span></td>
+                    <td style="font-size: 12px; white-space: nowrap;">${time}</td>
+                    <td style="color: var(--danger-color); font-weight: 600; font-size: 12px;">${alert.reason || 'Security Alert'}</td>
+                    <td>${snapHtml}</td>
                     <td>
-                        <button class="btn-action-delete" onclick="deleteAlert(${alert.id})" style="padding: 4px 8px; font-size: 11px;">${deleteText}</button>
+                        <button class="btn-action-delete" onclick="deleteAlert(${alert.id})" style="padding: 4px 10px; font-size: 11px; cursor: pointer;">${deleteText}</button>
                     </td>
                 </tr>
             `;
@@ -3736,6 +4065,10 @@ function getParkingSlotImageSrc(slot, activeSession) {
     // For Car: return car parked image
     return "assets/parking/car-parked.jpg";
 }
+
+let allParkingHistory = [];
+let parkingHistoryCurrentPage = 1;
+let parkingHistoryPageSize = 10;
 
 async function loadParkingData() {
     try {
@@ -3908,63 +4241,119 @@ async function loadParkingData() {
             }, 50);
         }
 
-        // Render history table
-        const historyBody = document.getElementById("parkingHistoryTableBody");
-        if (historyBody) {
-            historyBody.innerHTML = "";
-
-            if (history.length === 0) {
-                historyBody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--text-muted); padding: 20px;">${translations[currentLang].history_empty}</td></tr>`;
-            } else {
-                const sortedHistory = [...history].sort((a, b) => b.session_id - a.session_id);
-                
-                sortedHistory.forEach(sess => {
-                    const isCompleted = sess.status.toLowerCase() === "completed";
-                    const sessStatusText = isCompleted ? translations[currentLang].status_completed : translations[currentLang].status_active;
-                    const statusColor = isCompleted ? "var(--text-muted)" : "var(--danger-color)";
-                    const statusBg = isCompleted ? "var(--accent-light)" : "var(--danger-light)";
-                    
-                    let deleteBtnHtml = `
-                        <button onclick="deleteParkingLog(${sess.session_id})" class="btn-action-delete" style="padding: 4px 8px; font-size: 11px;">
-                            ${translations[currentLang].btn_delete || 'Delete'}
-                        </button>
-                    `;
-                    
-                    let actionHtml = deleteBtnHtml;
-                    if (!isCompleted) {
-                        actionHtml = `
-                            <div style="display: inline-flex; gap: 4px; align-items: center;">
-                                <button onclick="releaseParkingSlot(${sess.session_id})" class="btn-secondary" style="width: auto; padding: 4px 10px; font-size: 11px; background: var(--danger-light); color: var(--danger-color); border-color: var(--danger-color);">
-                                    ${translations[currentLang].btn_release}
-                                </button>
-                                ${deleteBtnHtml}
-                            </div>
-                        `;
-                    }
-
-                    historyBody.innerHTML += `
-                        <tr>
-                            <td>#PS-${sess.session_id}</td>
-                            <td><span class="plate-tag">${sess.plate_number || "UNKNOWN"}</span></td>
-                            <td><strong>${sess.slot_number || "-"}</strong></td>
-                            <td style="font-size: 12px;">${formatParkingTime(sess.entry_time)}</td>
-                            <td style="font-size: 12px;">${sess.exit_time ? formatParkingTime(sess.exit_time) : "-"}</td>
-                            <td>
-                                <span class="status-badge" style="color: ${statusColor}; background-color: ${statusBg}; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600;">
-                                    <div style="width: 6px; height: 6px; border-radius: 50%; background-color: ${statusColor};"></div>
-                                    ${sessStatusText}
-                                </span>
-                            </td>
-                            <td>${actionHtml}</td>
-                        </tr>
-                    `;
-                });
-            }
-        }
+        // Store and filter history with pagination
+        allParkingHistory = Array.isArray(history) ? history : [];
+        filterParkingHistoryTable();
 
     } catch (err) {
         console.error("Load parking data error:", err);
     }
+}
+
+function filterParkingHistoryTable() {
+    const historyBody = document.getElementById("parkingHistoryTableBody");
+    if (!historyBody) return;
+
+    const searchInput = document.getElementById("parkingHistorySearchInput");
+    const statusSelect = document.getElementById("parkingHistoryStatusFilter");
+
+    const q = searchInput ? searchInput.value.trim().toLowerCase() : "";
+    const cleanQ = q.replace(/[\s\-_]/g, "");
+    const statusVal = statusSelect ? statusSelect.value.toLowerCase() : "all";
+
+    let filtered = [...allParkingHistory].sort((a, b) => b.session_id - a.session_id);
+
+    if (statusVal === "active") {
+        filtered = filtered.filter(sess => sess.status.toLowerCase() !== "completed");
+    } else if (statusVal === "completed") {
+        filtered = filtered.filter(sess => sess.status.toLowerCase() === "completed");
+    }
+
+    if (cleanQ) {
+        filtered = filtered.filter(sess => {
+            const plate = (sess.plate_number || "").toLowerCase().replace(/[\s\-_]/g, "");
+            const slot = (sess.slot_number || "").toLowerCase().replace(/[\s\-_]/g, "");
+            const sid = String(sess.session_id || "").toLowerCase();
+            const sidTag = ("ps" + sid).replace(/[\s\-_]/g, "");
+            return plate.includes(cleanQ) || slot.includes(cleanQ) || sid.includes(cleanQ) || sidTag.includes(cleanQ);
+        });
+    }
+
+    const total = filtered.length;
+    const totalPages = Math.ceil(total / parkingHistoryPageSize) || 1;
+    if (parkingHistoryCurrentPage > totalPages) parkingHistoryCurrentPage = totalPages;
+    if (parkingHistoryCurrentPage < 1) parkingHistoryCurrentPage = 1;
+
+    const startIdx = (parkingHistoryCurrentPage - 1) * parkingHistoryPageSize;
+    const pageRecords = filtered.slice(startIdx, startIdx + parkingHistoryPageSize);
+
+    if (pageRecords.length === 0) {
+        const noHistoryMsg = (translations[currentLang] && translations[currentLang].history_empty) ? translations[currentLang].history_empty : "No parking sessions history found";
+        historyBody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--text-muted); padding: 25px;">${noHistoryMsg}</td></tr>`;
+    } else {
+        historyBody.innerHTML = pageRecords.map(sess => renderParkingHistoryRowHtml(sess)).join("");
+    }
+
+    const infoEl = document.getElementById("parkingHistoryPaginationInfo");
+    if (infoEl) {
+        const endIdx = Math.min(startIdx + parkingHistoryPageSize, total);
+        infoEl.innerText = total > 0 ? `Showing ${startIdx + 1} to ${endIdx} of ${total} entries` : `Showing 0 of 0 entries`;
+    }
+
+    renderPaginationControlsHelper("parkingHistoryPaginationControls", parkingHistoryCurrentPage, totalPages, "goToParkingHistoryPage");
+}
+
+function renderParkingHistoryRowHtml(sess) {
+    const isCompleted = sess.status.toLowerCase() === "completed";
+    const sessStatusText = isCompleted ? translations[currentLang].status_completed : translations[currentLang].status_active;
+    const statusColor = isCompleted ? "var(--text-muted)" : "var(--danger-color)";
+    const statusBg = isCompleted ? "var(--accent-light)" : "var(--danger-light)";
+    
+    let deleteBtnHtml = `
+        <button onclick="deleteParkingLog(${sess.session_id})" class="btn-action-delete" style="padding: 4px 8px; font-size: 11px;">
+            ${translations[currentLang].btn_delete || 'Delete'}
+        </button>
+    `;
+    
+    let actionHtml = deleteBtnHtml;
+    if (!isCompleted) {
+        actionHtml = `
+            <div style="display: inline-flex; gap: 4px; align-items: center;">
+                <button onclick="releaseParkingSlot(${sess.session_id})" class="btn-secondary" style="width: auto; padding: 4px 10px; font-size: 11px; background: var(--danger-light); color: var(--danger-color); border-color: var(--danger-color);">
+                    ${translations[currentLang].btn_release}
+                </button>
+                ${deleteBtnHtml}
+            </div>
+        `;
+    }
+
+    return `
+        <tr>
+            <td>#PS-${sess.session_id}</td>
+            <td><span class="plate-tag">${sess.plate_number || "UNKNOWN"}</span></td>
+            <td><strong>${sess.slot_number || "-"}</strong></td>
+            <td style="font-size: 12px;">${formatParkingTime(sess.entry_time)}</td>
+            <td style="font-size: 12px;">${sess.exit_time ? formatParkingTime(sess.exit_time) : "-"}</td>
+            <td>
+                <span class="status-badge" style="color: ${statusColor}; background-color: ${statusBg}; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600;">
+                    <div style="width: 6px; height: 6px; border-radius: 50%; background-color: ${statusColor};"></div>
+                    ${sessStatusText}
+                </span>
+            </td>
+            <td>${actionHtml}</td>
+        </tr>
+    `;
+}
+
+function changeParkingHistoryPageSize(val) {
+    parkingHistoryPageSize = parseInt(val, 10) || 10;
+    parkingHistoryCurrentPage = 1;
+    filterParkingHistoryTable();
+}
+
+function goToParkingHistoryPage(p) {
+    parkingHistoryCurrentPage = p;
+    filterParkingHistoryTable();
 }
 
 async function initializeParkingSlots() {
@@ -4098,7 +4487,7 @@ function showExitReceiptModal(data) {
     if (!modal || !body) return;
 
     const catKey = (data.category || 'car').toLowerCase();
-    const icon = catKey === 'bike' ? '🏍️' : catKey === 'van' ? '🚐' : catKey === 'bus' ? '🚌' : catKey === 'truck' ? '🚚' : '🚗';
+    const icon = catKey === 'bike' ? '🏍️' : catKey === 'van' ? '🚐' : catKey === 'bus' ? '🚌' : catKey === 'truck' ? '🚚' : (catKey === 'tuktuk' || catKey === 'tuk tuk' || catKey === 'three wheeler') ? '🛺' : '🚗';
 
     body.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px dashed #e2e8f0; padding-bottom: 12px; margin-bottom: 12px;">
@@ -4243,14 +4632,19 @@ async function clearAllParkingLogs() {
 }
 
 async function deleteAlert(alertId) {
-    if (!confirm("Are you sure you want to delete this security alert?")) {
+    const confirmMsg = (translations[currentLang] && translations[currentLang].confirm_delete_alert) 
+        ? translations[currentLang].confirm_delete_alert 
+        : "Are you sure you want to delete this security alert?";
+    if (!confirm(confirmMsg)) {
         return;
     }
 
     try {
+        const curToken = localStorage.getItem("token");
+        const headers = curToken ? { "Authorization": "Bearer " + curToken } : {};
         const response = await fetch(API_URL + "/alerts/" + alertId, {
             method: "DELETE",
-            headers: { "Authorization": "Bearer " + token }
+            headers: headers
         });
 
         if (!response.ok) {
@@ -4267,14 +4661,19 @@ async function deleteAlert(alertId) {
 }
 
 async function clearAllAlerts() {
-    if (!confirm("Are you sure you want to clear ALL security alerts?")) {
+    const confirmMsg = (translations[currentLang] && translations[currentLang].confirm_clear_all_alerts)
+        ? translations[currentLang].confirm_clear_all_alerts
+        : "Are you sure you want to clear ALL security alerts?";
+    if (!confirm(confirmMsg)) {
         return;
     }
 
     try {
+        const curToken = localStorage.getItem("token");
+        const headers = curToken ? { "Authorization": "Bearer " + curToken } : {};
         const response = await fetch(API_URL + "/alerts", {
             method: "DELETE",
-            headers: { "Authorization": "Bearer " + token }
+            headers: headers
         });
 
         if (!response.ok) {
@@ -5416,7 +5815,24 @@ async function processArrivalGateManual(targetPlate, bypassVerification = false)
             const slotName = data.slot_name || (data.record && data.record.parking_slot) || "Assigned";
             const isGuest = data.is_guest || (data.vehicle && data.vehicle.is_guest);
             const cat = (data.category || (data.vehicle && data.vehicle.category) || 'Car').toUpperCase();
-            const icon = cat === 'BIKE' ? '🏍️' : cat === 'VAN' ? '🚐' : cat === 'BUS' ? '🚌' : cat === 'TRUCK' ? '🚚' : '🚗';
+            const icon = cat === 'BIKE' ? '🏍️' : cat === 'VAN' ? '🚐' : cat === 'BUS' ? '🚌' : cat === 'TRUCK' ? '🚚' : (cat === 'TUK TUK' || cat === 'TUKTUK' || cat === 'THREE WHEELER') ? '🛺' : '🚗';
+
+            if (data.in_post_exit_cooldown) {
+                if (resultEl) {
+                    resultEl.innerHTML = `
+                        <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; padding: 14px; font-size: 13px;">
+                            <div style="font-weight: 800; color: #b45309; font-size: 15px; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+                                <span>⏳ POST-EXIT TRANSIT COOLDOWN ACTIVE</span>
+                                <span style="font-size: 11px; background: #f59e0b; color: white; padding: 3px 10px; border-radius: 10px;">ENTRY LOCKED</span>
+                            </div>
+                            <div style="color: #92400e; font-size: 13px; margin-top: 6px;">
+                                Vehicle <strong>${returnedPlate}</strong> recently exited. Re-entry is locked for <strong>${data.exit_cooldown_remaining_sec || 60}s</strong> while the vehicle departs the gate.
+                            </div>
+                        </div>
+                    `;
+                }
+                return;
+            }
 
             if (resultEl) {
                 resultEl.innerHTML = `
@@ -5463,6 +5879,7 @@ async function processArrivalGateManual(targetPlate, bypassVerification = false)
                                 <label style="font-size: 11px; font-weight: 700; color: #78350f; display: block; margin-bottom: 4px;">Vehicle Category</label>
                                 <select id="inlineGuestCategory" class="form-input" style="height: 36px; font-size: 12px; background: white; border-color: #fcd34d; font-weight: bold; color: var(--text-main);">
                                     <option value="Car">Car</option>
+                                    <option value="Tuk Tuk">Tuk Tuk</option>
                                     <option value="Bike">Bike</option>
                                     <option value="Van">Van</option>
                                     <option value="Bus">Bus</option>
@@ -5610,6 +6027,7 @@ async function denyGuestVehicleEntry() {
     }
 
     loadDashboardData();
+    triggerSecuritySiren();
     if (typeof loadAlerts === "function") loadAlerts();
     if (typeof loadSecurityAlerts === "function") loadSecurityAlerts();
 }
@@ -5994,28 +6412,45 @@ async function showDetectionConfirmModal(data) {
         if (titleEl) titleEl.innerText = t.modal_verif_title || "Vehicle Detection Verification";
         if (subtitleEl) subtitleEl.innerText = t.modal_verif_sub || "Review vehicle snapshot and confirm entrance authorization";
 
-        if (statusBadgeEl) {
-            if (data.is_registered) {
-                statusBadgeEl.innerHTML = `🟢 <strong>Registered Vehicle</strong><br><span style="font-size:11px; font-weight: normal; color:#64748b;">Owner: ${data.owner_name || 'System Registry'}</span>`;
-                statusBadgeEl.style.color = "#047857";
-            } else {
-                statusBadgeEl.innerHTML = `🛑 <strong style="color: #b91c1c;">UNREGISTERED VEHICLE (BARRIER LOCKED)</strong><br><span style="font-size:11px; font-weight: 600; color:#d97706;">Officer Guest Pass Authorization Required</span>`;
-                statusBadgeEl.style.color = "#b91c1c";
-            }
-        }
+        const inExitCooldown = Boolean(data.in_exit_cooldown === true || data.action_type === "exit_cooldown");
+        const exitCdRem = data.exit_cooldown_remaining_sec || 0;
 
-        if (approveBtn) {
-            approveBtn.disabled = false;
-            if (data.is_registered) {
-                approveBtn.innerHTML = t.btn_confirm_grant_entrance || `🟢 Confirm & Grant Entrance`;
-                approveBtn.style.background = "#10b981";
-                approveBtn.style.borderColor = "#10b981";
-            } else {
-                approveBtn.innerHTML = `🙋‍♂️ Authorize Guest Pass`;
-                approveBtn.style.background = "#f59e0b";
-                approveBtn.style.borderColor = "#d97706";
+        if (inExitCooldown && exitCdRem > 0) {
+            if (statusBadgeEl) {
+                statusBadgeEl.innerHTML = `⏳ <strong style="color: #d97706;">Vehicle Recently Exited</strong><br><span style="font-size:11px; font-weight: bold; color:#b45309;">⚠️ Transit Cooldown Active — Re-entry locked for ${exitCdRem}s</span>`;
+                statusBadgeEl.style.color = "#d97706";
             }
-            approveBtn.style.cursor = "pointer";
+            if (approveBtn) {
+                approveBtn.disabled = true;
+                approveBtn.innerHTML = `⏳ Re-entry Locked (${exitCdRem}s Cooldown)`;
+                approveBtn.style.background = "#94a3b8";
+                approveBtn.style.borderColor = "#94a3b8";
+                approveBtn.style.cursor = "not-allowed";
+            }
+        } else {
+            if (statusBadgeEl) {
+                if (data.is_registered) {
+                    statusBadgeEl.innerHTML = `🟢 <strong>Registered Vehicle</strong><br><span style="font-size:11px; font-weight: normal; color:#64748b;">Owner: ${data.owner_name || 'System Registry'}</span>`;
+                    statusBadgeEl.style.color = "#047857";
+                } else {
+                    statusBadgeEl.innerHTML = `⏳ <strong style="color: #d97706;">UNREGISTERED VEHICLE — PENDING AUTHORIZATION</strong><br><span style="font-size:11px; font-weight: 600; color:#64748b;">Barrier locked. Select Guest Pass or Deny Entry below:</span>`;
+                    statusBadgeEl.style.color = "#d97706";
+                }
+            }
+
+            if (approveBtn) {
+                approveBtn.disabled = false;
+                if (data.is_registered) {
+                    approveBtn.innerHTML = t.btn_confirm_grant_entrance || `🟢 Confirm & Grant Entrance`;
+                    approveBtn.style.background = "#10b981";
+                    approveBtn.style.borderColor = "#10b981";
+                } else {
+                    approveBtn.innerHTML = `🙋‍♂️ Authorize Guest Pass`;
+                    approveBtn.style.background = "#f59e0b";
+                    approveBtn.style.borderColor = "#d97706";
+                }
+                approveBtn.style.cursor = "pointer";
+            }
         }
 
         if (denyBtn) {
@@ -6030,6 +6465,9 @@ function closeDetectionConfirmModal() {
     const modal = document.getElementById("detectionConfirmModal");
     if (modal) modal.style.display = "none";
     activeVerificationData = null;
+    if (isAutoLiveScanEnabled && webcamStream && !isScanInProgress) {
+        scheduleNextAutoScan(300);
+    }
 }
 
 async function approveDetectionConfirmModal() {
@@ -6100,6 +6538,7 @@ async function approveDetectionConfirmModal() {
                             <label style="font-size: 11px; font-weight: 700; color: #78350f; display: block; margin-bottom: 4px;">Vehicle Category</label>
                             <select id="inlineGuestCategory" class="form-input" style="height: 36px; font-size: 12px; background: white; border-color: #fcd34d; font-weight: bold; color: var(--text-main);">
                                 <option value="Car">Car</option>
+                                <option value="Tuk Tuk">Tuk Tuk</option>
                                 <option value="Bike">Bike</option>
                                 <option value="Van">Van</option>
                                 <option value="Bus">Bus</option>
@@ -6135,19 +6574,26 @@ async function denyDetectionConfirmModal() {
     if (plate) {
         // Flag security alert for denied vehicle
         try {
+            const curToken = localStorage.getItem("token");
             const headers = { "Content-Type": "application/json" };
-            if (token) headers["Authorization"] = "Bearer " + token;
-            await fetch(API_URL + "/admin/alerts", {
+            if (curToken) headers["Authorization"] = "Bearer " + curToken;
+
+            const snap = activeVerificationData ? (activeVerificationData.snapshot || activeVerificationData.crop_snapshot) : null;
+
+            await fetch(API_URL + "/alerts", {
                 method: "POST",
                 headers: headers,
                 body: JSON.stringify({
                     plate_number: plate,
-                    reason: `Entrance DENIED by Security Operator during snapshot verification.`
+                    reason: `Entrance DENIED by Security Operator during snapshot verification. Barrier kept locked.`,
+                    snapshot: snap
                 })
             });
-            alert(`🛑 Entry Denied for plate ${plate}. Security alert logged.`);
+
+            alert(`🛑 Entry Denied for vehicle ${plate}. Security alert logged.`);
+            triggerSecuritySiren();
             if (typeof loadAlerts === "function") loadAlerts();
-            if (typeof loadSecurityAlerts === "function") loadSecurityAlerts();
+            if (typeof loadDashboardData === "function") loadDashboardData();
         } catch (err) {
             console.error("Error logging denied entry alert:", err);
         }

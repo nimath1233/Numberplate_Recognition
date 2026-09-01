@@ -18,9 +18,91 @@ router = APIRouter(
 
 from pathlib import Path
 from config import UPLOAD_DIR
+import time
 
 UPLOAD_FOLDER = UPLOAD_DIR
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+
+# In-memory post-exit cooldown cache: { clean_plate_string: exit_unix_timestamp }
+recent_exits_cache: dict[str, float] = {}
+
+def record_vehicle_exit_timestamp(plate_number: str):
+    """Record an exit event timestamp for immediate post-exit re-entry cooldown checks."""
+    if not plate_number:
+        return
+    clean = re.sub(r'[\s\-_]', '', str(plate_number).strip().upper())
+    if clean and clean not in ("UNKNOWN", "NOPLATE"):
+        recent_exits_cache[clean] = time.time()
+
+
+def check_post_exit_cooldown(db: Session, plate_number: str, vehicle_id: int | None = None, cooldown_seconds: int = 60) -> tuple[bool, int]:
+    """
+    Check if the vehicle exited within the last `cooldown_seconds` (default 60s).
+    Enforces post-exit re-entry protection to prevent immediate re-entry loop.
+    Returns: (is_in_cooldown: bool, remaining_seconds: int)
+    """
+    if not plate_number:
+        return False, 0
+    clean_target = re.sub(r'[\s\-_]', '', str(plate_number).strip().upper())
+    if not clean_target or clean_target in ("UNKNOWN", "NOPLATE"):
+        return False, 0
+
+    now_unix = time.time()
+
+    # 1. Quick in-memory cache check
+    mem_exit = recent_exits_cache.get(clean_target)
+    if mem_exit and (now_unix - mem_exit < cooldown_seconds):
+        rem = int(cooldown_seconds - (now_unix - mem_exit))
+        return True, max(1, rem)
+
+    now_dt = datetime.now()
+
+    # 2. Database EntranceRecord check for most recent exit
+    recent_closed = db.query(EntranceRecord).filter(
+        EntranceRecord.exit_time.isnot(None)
+    ).order_by(EntranceRecord.exit_time.desc()).limit(30).all()
+
+    for rec in recent_closed:
+        if rec.plate_number:
+            rec_clean = re.sub(r'[\s\-_]', '', rec.plate_number.strip().upper())
+            if rec_clean == clean_target:
+                exit_ts = rec.exit_time
+                if exit_ts:
+                    if exit_ts.tzinfo is not None and now_dt.tzinfo is None:
+                        from datetime import timezone
+                        now_dt = datetime.now(timezone.utc)
+                    elif exit_ts.tzinfo is None and now_dt.tzinfo is not None:
+                        exit_ts = exit_ts.replace(tzinfo=now_dt.tzinfo)
+
+                    secs_since_exit = (now_dt - exit_ts).total_seconds()
+                    if 0 <= secs_since_exit < cooldown_seconds:
+                        rem = int(cooldown_seconds - secs_since_exit)
+                        recent_exits_cache[clean_target] = now_unix - secs_since_exit
+                        return True, max(1, rem)
+                break
+
+    # 3. Database ParkingSession check if vehicle_id is provided
+    if vehicle_id:
+        sess = db.query(ParkingSession).filter(
+            ParkingSession.vehicle_id == vehicle_id,
+            ParkingSession.status == "Completed",
+            ParkingSession.exit_time.isnot(None)
+        ).order_by(ParkingSession.exit_time.desc()).first()
+        if sess and sess.exit_time:
+            exit_ts = sess.exit_time
+            if exit_ts.tzinfo is not None and now_dt.tzinfo is None:
+                from datetime import timezone
+                now_dt = datetime.now(timezone.utc)
+            elif exit_ts.tzinfo is None and now_dt.tzinfo is not None:
+                exit_ts = exit_ts.replace(tzinfo=now_dt.tzinfo)
+
+            secs_since_exit = (now_dt - exit_ts).total_seconds()
+            if 0 <= secs_since_exit < cooldown_seconds:
+                rem = int(cooldown_seconds - secs_since_exit)
+                recent_exits_cache[clean_target] = now_unix - secs_since_exit
+                return True, max(1, rem)
+
+    return False, 0
 
 
 def get_first_available_slot(db: Session):
@@ -252,6 +334,7 @@ def process_vehicle_entrance(
                 slot.status = "Available"
 
         db.commit()
+        record_vehicle_exit_timestamp(clean_plate)
 
         hours = total_seconds // 3600
         mins = (total_seconds % 3600) // 60
@@ -268,6 +351,23 @@ def process_vehicle_entrance(
             "owner_name": vehicle.owner_name,
             "duration_text": duration_text,
             "status": "Exit Authorized"
+        }
+
+    # 2.5. Check 60-SECOND POST-EXIT RE-ENTRY COOLDOWN:
+    # If vehicle exited within the last 60 seconds, DO NOT create another EntranceRecord or assign a slot!
+    in_exit_cd, exit_cd_rem = check_post_exit_cooldown(db, clean_plate, vehicle.id if vehicle else None, 60)
+    if in_exit_cd:
+        return {
+            "success": True,
+            "is_departure": False,
+            "in_post_exit_cooldown": True,
+            "exit_cooldown_remaining_sec": exit_cd_rem,
+            "message": f"Vehicle recently exited — transit cooldown active ({exit_cd_rem}s remaining). Re-entry locked.",
+            "plate_number": clean_plate,
+            "slot_name": "Re-entry Cooldown",
+            "category": getattr(vehicle, "category", "Car") or "Car",
+            "owner_name": vehicle.owner_name,
+            "status": "Transit Cooldown"
         }
 
     # 3. Accept and resolve real snapshot
@@ -426,6 +526,7 @@ def authorize_guest_entrance(
                 slot.status = "Available"
 
         db.commit()
+        record_vehicle_exit_timestamp(clean_plate)
 
         hours = total_seconds // 3600
         mins = (total_seconds % 3600) // 60
@@ -442,6 +543,23 @@ def authorize_guest_entrance(
             "owner_name": getattr(vehicle, "owner_name", None) or "Guest",
             "duration_text": duration_text,
             "status": "Exit Authorized"
+        }
+
+    # 2.5. Check 60-SECOND POST-EXIT RE-ENTRY COOLDOWN:
+    # If guest vehicle exited within the last 60 seconds, DO NOT create another EntranceRecord or assign a slot!
+    in_exit_cd, exit_cd_rem = check_post_exit_cooldown(db, clean_plate, vehicle.id if vehicle else None, 60)
+    if in_exit_cd:
+        return {
+            "success": True,
+            "is_departure": False,
+            "in_post_exit_cooldown": True,
+            "exit_cooldown_remaining_sec": exit_cd_rem,
+            "message": f"Guest Vehicle recently exited — transit cooldown active ({exit_cd_rem}s remaining). Re-entry locked.",
+            "plate_number": clean_plate,
+            "slot_name": "Re-entry Cooldown",
+            "category": getattr(vehicle, "category", "Car") or "Car",
+            "owner_name": getattr(vehicle, "owner_name", None) or "Guest",
+            "status": "Transit Cooldown"
         }
 
     assigned_slot = None
@@ -531,6 +649,24 @@ def deny_guest_entrance(
     )
     db.add(security_alert)
     db.commit()
+    db.refresh(security_alert)
+
+    # 3. Broadcast real-time WebSocket alert event
+    try:
+        from websocket_manager import ws_manager
+        ws_manager.broadcast_sync({
+            "event": "DETECTION_ALERT",
+            "data": {
+                "id": security_alert.id,
+                "plate_number": clean_plate,
+                "reason": security_alert.reason,
+                "snapshot": real_snap,
+                "status": "Flagged",
+                "alert_time": security_alert.alert_time.isoformat() if security_alert.alert_time else datetime.now().isoformat()
+            }
+        })
+    except Exception as e:
+        print("WebSocket guest deny alert warning:", e)
 
     return {
         "success": True,

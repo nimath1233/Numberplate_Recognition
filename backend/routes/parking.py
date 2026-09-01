@@ -2,12 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timezone
+import math
 
 from database import get_db
 from models import ParkingSlot, ParkingSession, Vehicle, EntranceRecord
 from schemas import ParkingAssign, ParkingRelease
 from dependencies import get_current_admin_user, get_current_user
 from models import User
+from routes.entrance import check_post_exit_cooldown, record_vehicle_exit_timestamp, find_open_entrance_record_by_plate
 
 router = APIRouter(
     prefix="/parking",
@@ -173,6 +175,14 @@ def assign_slot(data: ParkingAssign, db: Session = Depends(get_db)):
             detail="Vehicle is already parked."
         )
 
+    # 2.5 Check 60-Second Post-Exit Re-Entry Cooldown
+    in_exit_cd, rem_cd = check_post_exit_cooldown(db, vehicle.plate_number, vehicle.id, 60)
+    if in_exit_cd and not getattr(data, "force_override", False):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Re-Entry Cooldown Active: Vehicle '{vehicle.plate_number}' recently exited. Entry is locked for {rem_cd}s."
+        )
+
     # 3. Resolve parking slot
     slot = None
     if data.slot_id is not None:
@@ -273,8 +283,6 @@ def release_slot(data: ParkingRelease, db: Session = Depends(get_db)):
 
 @router.post("/exit-process")
 def process_vehicle_exit(data: ParkingRelease, db: Session = Depends(get_db)):
-    import math
-
     session = None
     if data.session_id is not None:
         session = db.query(ParkingSession).filter(
@@ -299,7 +307,6 @@ def process_vehicle_exit(data: ParkingRelease, db: Session = Depends(get_db)):
                 EntranceRecord.exit_time.is_(None)
             ).first()
         if not entrance_rec and data.plate_number:
-            from routes.entrance import find_open_entrance_record_by_plate
             entrance_rec = find_open_entrance_record_by_plate(db, data.plate_number)
 
         if entrance_rec:
@@ -332,6 +339,9 @@ def process_vehicle_exit(data: ParkingRelease, db: Session = Depends(get_db)):
                 vehicle = db.query(Vehicle).filter(func.upper(Vehicle.plate_number) == clean_p).first()
 
             db.commit()
+            record_vehicle_exit_timestamp(entrance_rec.plate_number)
+            if vehicle and vehicle.plate_number:
+                record_vehicle_exit_timestamp(vehicle.plate_number)
 
             hours = math.floor(total_seconds / 3600)
             mins = math.floor((total_seconds % 3600) / 60)
@@ -392,12 +402,13 @@ def process_vehicle_exit(data: ParkingRelease, db: Session = Depends(get_db)):
 
     # Also update matching EntranceRecord
     if vehicle:
-        from routes.entrance import find_open_entrance_record_by_plate
         entrance_rec = find_open_entrance_record_by_plate(db, vehicle.plate_number)
         if entrance_rec:
             entrance_rec.exit_time = exit_time
 
     db.commit()
+    if vehicle and vehicle.plate_number:
+        record_vehicle_exit_timestamp(vehicle.plate_number)
 
     hours = math.floor(total_seconds / 3600)
     mins = math.floor((total_seconds % 3600) / 60)
@@ -569,11 +580,25 @@ def get_occupancy_analytics(db: Session = Depends(get_db)):
 
     all_sessions = db.query(ParkingSession).all()
 
-    category_counts = {"Car": 0, "Bike": 0, "Van": 0, "Bus": 0, "Truck": 0}
+    category_counts = {"Car": 0, "Tuk Tuk": 0, "Bike": 0, "Van": 0, "Bus": 0, "Truck": 0}
     active_list = []
     seen_plates = set()
 
     now = datetime.now()
+
+    def map_category_key(raw_cat: str) -> str:
+        ck = (raw_cat or "Car").strip().lower()
+        if ck in ("tuktuk", "tuk tuk", "three wheeler", "three-wheeler", "auto"):
+            return "Tuk Tuk"
+        elif ck in ("bike", "motorbike", "motorcycle"):
+            return "Bike"
+        elif ck == "van":
+            return "Van"
+        elif ck == "bus":
+            return "Bus"
+        elif ck in ("truck", "lorry"):
+            return "Truck"
+        return "Car"
 
     for rec in active_entrances:
         plate = rec.plate_number or "UNKNOWN"
@@ -591,11 +616,8 @@ def get_occupancy_analytics(db: Session = Depends(get_db)):
         if not cat:
             cat = "Car"
         
-        cat_key = cat.capitalize()
-        if cat_key in category_counts:
-            category_counts[cat_key] += 1
-        else:
-            category_counts["Car"] += 1
+        target_cat = map_category_key(cat)
+        category_counts[target_cat] += 1
 
         owner_name = "Visitor / Guest"
         if vehicle:
@@ -628,11 +650,8 @@ def get_occupancy_analytics(db: Session = Depends(get_db)):
             seen_plates.add(plate)
             slot = db.query(ParkingSlot).filter(ParkingSlot.id == s.slot_id).first()
             cat = getattr(v, "category", "Car") if v else "Car"
-            cat_key = cat.capitalize() if cat else "Car"
-            if cat_key in category_counts:
-                category_counts[cat_key] += 1
-            else:
-                category_counts["Car"] += 1
+            target_cat = map_category_key(cat)
+            category_counts[target_cat] += 1
             
             dwell_seconds = int((now - s.entry_time).total_seconds()) if s.entry_time else 0
 

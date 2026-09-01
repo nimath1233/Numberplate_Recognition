@@ -248,3 +248,56 @@ def admin_multi_search(search_payload: Dict[str, Any], db: Session = Depends(get
         ]
     }
 
+
+# =========================================================
+# AI ENGINE HARDWARE ACCELERATION CONTROLS (CPU <-> GPU)
+# =========================================================
+
+@router.get("/ai-engine/status")
+def get_ai_engine_status():
+    """Get real-time hardware execution status for YOLO and OCR models."""
+    try:
+        from ai.anpr_pipeline import get_pipeline
+        pipeline = get_pipeline()
+        return pipeline.get_hardware_status()
+    except Exception as e:
+        return {
+            "error": str(e),
+            "yolo": {"device": "unknown", "engine": "unknown"},
+            "ocr": {"device": "unknown", "engine": "unknown"},
+            "system": {"cuda_available": False}
+        }
+
+
+@router.post("/ai-engine/config")
+def update_ai_engine_config(config_payload: Dict[str, Any]):
+    """
+    Hot-switch execution hardware (CPU <-> GPU) for YOLO and/or OCR models.
+    Payload:
+    {
+        "yolo_device": "cuda:0" | "cpu",
+        "yolo_engine": "PYTORCH" | "OPENVINO",
+        "ocr_device": "gpu" | "cpu"
+    }
+    """
+    yolo_dev = config_payload.get("yolo_device")
+    ocr_dev = config_payload.get("ocr_device")
+    yolo_eng = config_payload.get("yolo_engine")
+
+    try:
+        from ai.anpr_pipeline import get_pipeline
+        pipeline = get_pipeline()
+        result = pipeline.configure_devices(
+            yolo_device=yolo_dev,
+            ocr_device=ocr_dev,
+            yolo_engine=yolo_eng
+        )
+        return {
+            "message": "AI Engine hardware configuration updated successfully",
+            "result": result,
+            "status": pipeline.get_hardware_status()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to configure AI engine devices: {e}")
+
+

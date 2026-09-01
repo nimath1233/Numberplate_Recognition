@@ -363,7 +363,10 @@
                         <canvas id="detectionOverlayCanvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5;"></canvas>
                         <canvas id="snapshotCanvas" style="display: none;"></canvas>
                     </div>
-                    <div class="capture-controls" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <div class="capture-controls" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                        <select id="cameraDeviceSelect" onchange="onCameraDeviceChanged()" class="form-input" style="width: auto; max-width: 230px; height: 38px; font-size: 12px; font-weight: 600; background: white; border: 1px solid var(--border-color); border-radius: 8px; padding: 0 8px; cursor: pointer;">
+                            <option value="">🎥 Auto Detect / Default Camera</option>
+                        </select>
                         <button onclick="startCamera()" class="btn-primary" style="width: auto;" data-i18n="btn_start_cam">Start Live Camera</button>
                         <button onclick="stopCamera()" class="btn-secondary" style="width: auto;" data-i18n="btn_stop_cam">Stop Camera</button>
                         <button onclick="scanCurrentFrame()" class="btn-secondary" style="width: auto; background-color: var(--accent-color); color: white; border-color: var(--accent-color);" data-i18n="btn_scan_frame">Capture & Scan Frame</button>
@@ -409,7 +412,7 @@
                 <div class="table-controls-bar">
                     <div class="table-search-group">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                        <input type="text" id="detectionSearchInput" class="table-search-input" placeholder="Search detection plate, owner, model...">
+                        <input type="text" id="detectionSearchInput" class="table-search-input" placeholder="Search detection plate, owner, model..." oninput="filterRecords()">
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <span style="font-size: 13px; color: var(--text-muted);">Rows per page:</span>
@@ -455,28 +458,32 @@
         <!-- 4. SECURITY ALERTS TAB -->
         <div id="tab-alerts" class="tab-section">
             <div class="table-card">
-                <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                    <h3 data-i18n="alerts_title">Active Security Alerts</h3>
+                <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 16px;">
+                    <div>
+                        <h3 data-i18n="alerts_title" style="margin: 0;">Active Security Alerts</h3>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px; margin-bottom: 0;">Suspicious and unauthorized vehicle alerts detected by ANPR</p>
+                    </div>
                     <button onclick="clearAllAlerts()" id="btnClearAlerts" class="btn-secondary" style="width: auto; padding: 6px 14px; font-size: 12px; background-color: var(--danger-color); color: white; border-color: var(--danger-color); display: flex; align-items: center; gap: 6px;">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> <span data-i18n="btn_clear_all_alerts">Clear All Alerts</span>
                     </button>
-
                 </div>
-                <table class="custom-table">
-                    <thead>
-                        <tr>
-                            <th data-i18n="th_id">ID</th>
-                            <th data-i18n="th_vehicle_plate">Plate Number</th>
-                            <th data-i18n="th_alert_time">Alert Time</th>
-                            <th data-i18n="th_reason">Reason</th>
-                            <th data-i18n="th_img_ref">Image Reference</th>
-                            <th data-i18n="th_actions">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="alertsTableBody">
-                        <!-- Filled by JS -->
-                    </tbody>
-                </table>
+                <div class="table-scroll-container">
+                    <table class="custom-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="th_id">ID</th>
+                                <th data-i18n="th_vehicle_plate">Plate Number</th>
+                                <th data-i18n="th_alert_time">Alert Time</th>
+                                <th data-i18n="th_reason">Reason</th>
+                                <th data-i18n="th_img_ref">Image Reference</th>
+                                <th data-i18n="th_actions">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="alertsTableBody">
+                            <!-- Filled by JS -->
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -519,15 +526,41 @@
 
             <!-- Parking History Section -->
             <div class="table-card">
-                <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                    <h3 data-i18n="history_title">Parking History & Session Logs</h3>
-                    <button onclick="clearAllParkingLogs()" id="btnClearParkingLogs" class="btn-secondary" style="width: auto; padding: 6px 14px; font-size: 12px; background-color: var(--danger-color); color: white; border-color: var(--danger-color); display: flex; align-items: center; gap: 6px;">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> <span data-i18n="btn_clear_all_parking">Clear All Logs</span>
-                    </button>
-
+                <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 16px;">
+                    <div>
+                        <h3 data-i18n="history_title" style="margin: 0; font-size: 18px; font-weight: 700;">Parking History & Session Logs</h3>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px; margin-bottom: 0;">Comprehensive record of occupied, assigned, and departed parking sessions</p>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button onclick="clearAllParkingLogs()" id="btnClearParkingLogs" class="btn-secondary" style="width: auto; padding: 6px 14px; font-size: 12px; background-color: var(--danger-color); color: white; border-color: var(--danger-color); display: flex; align-items: center; gap: 6px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> <span data-i18n="btn_clear_all_parking">Clear All Logs</span>
+                        </button>
+                    </div>
                 </div>
 
-                <div style="overflow-x: auto;">
+                <!-- Parking History Search & Filter Controls Bar -->
+                <div class="table-controls-bar">
+                    <div class="table-search-group">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" id="parkingHistorySearchInput" class="table-search-input" placeholder="Search plate, slot, session ID..." oninput="filterParkingHistoryTable()">
+                        <select id="parkingHistoryStatusFilter" class="table-filter-select" onchange="filterParkingHistoryTable()">
+                            <option value="all">All Statuses</option>
+                            <option value="active">Active Only</option>
+                            <option value="completed">Completed Only</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 13px; color: var(--text-muted);">Rows per page:</span>
+                        <select id="parkingHistoryPageSizeSelect" class="pagination-select" onchange="changeParkingHistoryPageSize(this.value)">
+                            <option value="10" selected>10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="table-scroll-container">
                     <table class="custom-table">
                         <thead>
                             <tr>
@@ -544,6 +577,12 @@
                             <!-- Filled by JS -->
                         </tbody>
                     </table>
+                </div>
+
+                <!-- Parking History Pagination Bar -->
+                <div class="pagination-bar">
+                    <div id="parkingHistoryPaginationInfo" class="pagination-info">Showing 0 of 0 entries</div>
+                    <div id="parkingHistoryPaginationControls" class="pagination-controls"></div>
                 </div>
             </div>
         </div>
@@ -852,6 +891,7 @@
                             <select id="adminVehicleCategoryFilter" onchange="filterAdminVehiclesTable()" class="admin-select-filter">
                                 <option value="" data-i18n="opt_all_categories">All Categories</option>
                                 <option value="Car" data-i18n="cat_car">Car</option>
+                                <option value="Tuk Tuk">Tuk Tuk</option>
                                 <option value="Bike" data-i18n="cat_bike">Bike</option>
                                 <option value="Van" data-i18n="cat_van">Van</option>
                                 <option value="Bus" data-i18n="cat_bus">Bus</option>
@@ -993,6 +1033,7 @@
                             <select id="adminSearchCategory" class="form-input" style="height: 36px; padding: 0 8px; width: 100%;">
                                 <option value="" data-i18n="opt_all_categories">All Categories</option>
                                 <option value="Car" data-i18n="cat_car">Car</option>
+                                <option value="Tuk Tuk">Tuk Tuk</option>
                                 <option value="Bike" data-i18n="cat_bike">Bike</option>
                                 <option value="Van" data-i18n="cat_van">Van</option>
                                 <option value="Bus" data-i18n="cat_bus">Bus</option>
@@ -1074,6 +1115,76 @@
 
             <!-- Subtab 4: Controls -->
             <div id="admin-view-controls" class="admin-view-section" style="display: none;">
+                <!-- AI Engine Hardware Acceleration Card -->
+                <div class="table-card" style="padding: 24px; margin-bottom: 20px; border-radius: 14px; background: #ffffff; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 14px; margin-bottom: 18px;">
+                        <div>
+                            <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                                <span>⚡</span> AI Engine Hardware Acceleration (CPU / GPU)
+                            </h3>
+                            <p style="margin: 4px 0 0 0; font-size: 13px; color: #64748b;">
+                                Dynamically hot-switch execution hardware between CUDA GPU and Intel CPU for YOLO Detector and OCR Recognizer.
+                            </p>
+                        </div>
+                        <button onclick="loadAIEngineStatus()" class="admin-btn-outline" style="font-size: 12px; padding: 6px 12px; display: flex; align-items: center; gap: 6px;">
+                            <span>🔄</span> Refresh Telemetry
+                        </button>
+                    </div>
+
+                    <!-- Live Hardware Telemetry Banner -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; background: #f8fafc; padding: 14px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                        <div>
+                            <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">GPU Hardware</div>
+                            <div id="aiEngineGpuName" style="font-size: 13px; font-weight: 800; color: #0f172a; margin-top: 2px;">Detecting...</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">CUDA Acceleration</div>
+                            <div id="aiEngineCudaStatus" style="font-size: 13px; font-weight: 800; color: #10b981; margin-top: 2px;">Active</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">GPU Memory Allocated</div>
+                            <div id="aiEngineVram" style="font-size: 13px; font-weight: 800; color: #3b82f6; margin-top: 2px;">0.0 MB</div>
+                        </div>
+                    </div>
+
+                    <!-- Controls Grid for YOLO and OCR -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px;">
+                        <!-- YOLO Detector Control Box -->
+                        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span style="font-size: 14px; font-weight: 800; color: #1e293b;">🎯 YOLO Plate Detector</span>
+                                <span id="aiYoloActiveBadge" style="font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 6px; background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0;">CUDA GPU</span>
+                            </div>
+                            <p style="font-size: 12px; color: #64748b; margin: 0 0 14px 0;">Select execution engine for vehicle and license plate bounding box localization.</p>
+                            <div style="display: flex; gap: 8px;">
+                                <button id="btnYoloGpu" onclick="switchYoloDevice('cuda:0', 'PYTORCH')" style="flex: 1; padding: 8px 12px; font-size: 12px; font-weight: 700; border-radius: 8px; border: 1px solid #3b82f6; background: #3b82f6; color: white; cursor: pointer; transition: all 0.2s;">
+                                    🚀 GPU (CUDA)
+                                </button>
+                                <button id="btnYoloCpu" onclick="switchYoloDevice('cpu', 'OPENVINO')" style="flex: 1; padding: 8px 12px; font-size: 12px; font-weight: 700; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; color: #475569; cursor: pointer; transition: all 0.2s;">
+                                    ⚙️ CPU (OpenVINO)
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- OCR Recognizer Control Box -->
+                        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span style="font-size: 14px; font-weight: 800; color: #1e293b;">🔤 PP-OCRv5 Recognizer</span>
+                                <span id="aiOcrActiveBadge" style="font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 6px; background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe;">oneDNN CPU</span>
+                            </div>
+                            <p style="font-size: 12px; color: #64748b; margin: 0 0 14px 0;">Select execution engine for Sinhala and English character sequence decoding.</p>
+                            <div style="display: flex; gap: 8px;">
+                                <button id="btnOcrGpu" onclick="switchOcrDevice('gpu')" style="flex: 1; padding: 8px 12px; font-size: 12px; font-weight: 700; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; color: #475569; cursor: pointer; transition: all 0.2s;">
+                                    🚀 GPU (CUDA)
+                                </button>
+                                <button id="btnOcrCpu" onclick="switchOcrDevice('cpu')" style="flex: 1; padding: 8px 12px; font-size: 12px; font-weight: 700; border-radius: 8px; border: 1px solid #3b82f6; background: #3b82f6; color: white; cursor: pointer; transition: all 0.2s;">
+                                    ⚙️ CPU (oneDNN)
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
                     <div class="table-card" style="padding: 20px;">
                         <h4 style="margin-top:0; font-weight:700;" data-i18n="controls_export_tools">Data Export Tools</h4>
@@ -1220,6 +1331,7 @@
             <label for="adminAddCategory" style="font-weight: 700; font-size: 13px; color: #475569; margin-bottom: 6px; display: block;" data-i18n="lbl_vehicle_category">Vehicle Category</label>
             <select id="adminAddCategory" class="form-input" style="height: 42px; border-radius: 8px; border: 1px solid #e2e8f0; width: 100%; padding: 0 14px; font-size: 13px; background: white; font-weight: 500; color: #1e293b;">
                 <option value="Car" data-i18n="cat_car">Car</option>
+                <option value="Tuk Tuk">Tuk Tuk</option>
                 <option value="Bike" data-i18n="cat_bike">Bike</option>
                 <option value="Van" data-i18n="cat_van">Van</option>
                 <option value="Bus" data-i18n="cat_bus">Bus</option>
@@ -1309,6 +1421,7 @@
             <label for="editCategory" data-i18n="lbl_vehicle_category">Vehicle Category</label>
             <select id="editCategory" class="form-input" style="padding: 10px; width: 100%; border-radius: 8px; border: 1px solid var(--border-color); background: white; color: var(--text-main); font-weight: 500;">
                 <option value="Car">Car</option>
+                <option value="Tuk Tuk">Tuk Tuk</option>
                 <option value="Bike">Bike</option>
                 <option value="Van">Van</option>
                 <option value="Bus">Bus</option>
@@ -1375,6 +1488,7 @@
             <label for="regCategory" data-i18n="lbl_vehicle_category">Vehicle Category</label>
             <select id="regCategory" class="form-input" style="padding: 10px; width: 100%; border-radius: 8px; border: 1px solid var(--border-color); background: white; color: var(--text-main); font-weight: 500;">
                 <option value="Car">Car</option>
+                <option value="Tuk Tuk">Tuk Tuk</option>
                 <option value="Bike">Bike</option>
                 <option value="Van">Van</option>
                 <option value="Bus">Bus</option>
@@ -1555,6 +1669,7 @@
             <label for="guestCategory" style="font-weight: 700; font-size: 12px; margin-bottom: 4px; display: block;">Vehicle Category</label>
             <select id="guestCategory" class="form-input" style="padding: 10px; width: 100%; border-radius: 8px; border: 1px solid var(--border-color); background: white; font-weight: 600; color: var(--text-main);">
                 <option value="Car">Car</option>
+                <option value="Tuk Tuk">Tuk Tuk</option>
                 <option value="Bike">Bike</option>
                 <option value="Van">Van</option>
                 <option value="Bus">Bus</option>

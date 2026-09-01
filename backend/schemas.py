@@ -91,6 +91,12 @@ class GuestDenyRequest(BaseModel):
     snapshot: str | None = None
 
 
+class AlertCreate(BaseModel):
+    plate_number: str
+    reason: str | None = "Security alert logged"
+    snapshot: str | None = None
+
+
 
 
 

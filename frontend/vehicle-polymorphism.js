@@ -215,20 +215,98 @@ class Truck3D extends Vehicle3D {
     }
 }
 
+// Concrete Subclass 6: TukTuk3D (Three-Wheeler)
+class TukTuk3D extends Vehicle3D {
+    constructor() {
+        super("Tuk Tuk", "tuktuk.glb", "🛺");
+    }
+
+    buildMesh() {
+        const group = new THREE.Group();
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x16a34a, metalness: 0.5, roughness: 0.3 }); // Classic Tuk Tuk Green
+        const canopyMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.9 }); // Black hood
+        const glassMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.1, transparent: true, opacity: 0.7 });
+        const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+
+        // Lower body base
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.35, 1.4), bodyMat);
+        body.position.set(0, 0.3, 0);
+        group.add(body);
+
+        // Front nose / cabin taper
+        const nose = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.35, 0.5), bodyMat);
+        nose.position.set(0, 0.3, 0.75);
+        group.add(nose);
+
+        // Windshield
+        const windshield = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.35, 0.05), glassMat);
+        windshield.position.set(0, 0.65, 0.45);
+        windshield.rotation.x = -0.15;
+        group.add(windshield);
+
+        // Canopy Roof
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.1, 1.35), canopyMat);
+        roof.position.set(0, 0.85, -0.05);
+        group.add(roof);
+
+        // Pillars
+        const pillarMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.8 });
+        const pillarGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.4, 8);
+        [[-0.4, 0.65, 0.45], [0.4, 0.65, 0.45], [-0.4, 0.65, -0.55], [0.4, 0.65, -0.55]].forEach(pos => {
+            const p = new THREE.Mesh(pillarGeo, pillarMat);
+            p.position.set(...pos);
+            group.add(p);
+        });
+
+        // 3 Wheels (1 Front Center, 2 Rear)
+        const wheelGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.12, 16);
+        
+        // Front Wheel (1)
+        const fWheel = new THREE.Mesh(wheelGeo, wheelMat);
+        fWheel.rotation.z = Math.PI / 2;
+        fWheel.position.set(0, 0.18, 0.75);
+        group.add(fWheel);
+
+        // Rear Wheels (2)
+        [[-0.48, 0.18, -0.45], [0.48, 0.18, -0.45]].forEach(pos => {
+            const rw = new THREE.Mesh(wheelGeo, wheelMat);
+            rw.rotation.z = Math.PI / 2;
+            rw.position.set(...pos);
+            group.add(rw);
+        });
+
+        // Headlight
+        const headLight = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.05, 12), new THREE.MeshBasicMaterial({ color: 0xfef08a }));
+        headLight.rotation.x = Math.PI / 2;
+        headLight.position.set(0, 0.35, 1.01);
+        group.add(headLight);
+
+        return group;
+    }
+}
+
 // Polymorphic Factory Class
 class Vehicle3DFactory {
     static create(category) {
-        const catKey = (category || 'car').toLowerCase();
+        const catKey = (category || 'car').toLowerCase().trim();
         switch (catKey) {
             case 'bike':
             case 'motorbike':
+            case 'motorcycle':
                 return new Bike3D();
             case 'van':
                 return new Van3D();
             case 'bus':
                 return new Bus3D();
             case 'truck':
+            case 'lorry':
                 return new Truck3D();
+            case 'tuktuk':
+            case 'tuk tuk':
+            case 'three wheeler':
+            case 'three-wheeler':
+            case 'auto':
+                return new TukTuk3D();
             case 'car':
             default:
                 return new Car3D();

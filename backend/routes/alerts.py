@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta
 import random
 
 from models import DetectionLog, Alert, Vehicle, User
+from schemas import AlertCreate
 from database import get_db
-from dependencies import get_current_user
+from dependencies import get_current_user, get_optional_current_user
 
 router = APIRouter(tags=["Alerts & Stats"])
 
@@ -46,6 +47,70 @@ def get_alerts(db: Session = Depends(get_db)):
             "alert_time": a.alert_time.isoformat() if a.alert_time else None
         })
     return results
+
+
+@router.post("/alerts", status_code=status.HTTP_201_CREATED)
+@router.post("/admin/alerts", status_code=status.HTTP_201_CREATED)
+def create_alert(
+    data: AlertCreate,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_optional_current_user)
+):
+    clean_plate = data.plate_number.strip().upper()
+    if not clean_plate:
+        raise HTTPException(status_code=400, detail="Plate number cannot be empty")
+
+    now = datetime.now()
+    reason = data.reason or f"Security alert: Vehicle '{clean_plate}' denied entry / flagged."
+
+    # 1. Create Security Alert record
+    new_alert = Alert(
+        plate_number=clean_plate,
+        snapshot=data.snapshot,
+        reason=reason,
+        alert_time=now
+    )
+    db.add(new_alert)
+
+    # 2. Update or create corresponding DetectionLog with Flagged status
+    flag_log = DetectionLog(
+        plate_number=clean_plate,
+        snapshot=data.snapshot,
+        status="Flagged",
+        detection_time=now
+    )
+    db.add(flag_log)
+    db.commit()
+    db.refresh(new_alert)
+
+    # 3. Broadcast real-time WebSocket alert event
+    try:
+        from websocket_manager import ws_manager
+        ws_manager.broadcast_sync({
+            "event": "DETECTION_ALERT",
+            "data": {
+                "id": new_alert.id,
+                "plate_number": clean_plate,
+                "reason": new_alert.reason,
+                "snapshot": new_alert.snapshot,
+                "status": "Flagged",
+                "alert_time": now.isoformat()
+            }
+        })
+    except Exception as e:
+        print("WebSocket alert broadcast warning:", e)
+
+    return {
+        "success": True,
+        "message": f"Security alert logged for vehicle '{clean_plate}'.",
+        "alert": {
+            "id": new_alert.id,
+            "plate_number": new_alert.plate_number,
+            "reason": new_alert.reason,
+            "snapshot": new_alert.snapshot,
+            "alert_time": new_alert.alert_time.isoformat() if new_alert.alert_time else None
+        }
+    }
 
 
 @router.get("/detection/stats")
@@ -95,7 +160,7 @@ def get_stats(db: Session = Depends(get_db)):
 def delete_log(
     log_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User | None = Depends(get_optional_current_user)
 ):
     log = db.query(DetectionLog).filter(DetectionLog.id == log_id).first()
     if not log:
@@ -108,17 +173,37 @@ def delete_log(
 
     db.delete(log)
     db.commit()
+
+    try:
+        from websocket_manager import ws_manager
+        ws_manager.broadcast_sync({
+            "event": "DETECTION_LOG_DELETED",
+            "data": { "id": log_id }
+        })
+    except Exception:
+        pass
+
     return {"message": "Log deleted successfully", "id": log_id}
 
 
 @router.delete("/detection/logs")
 def clear_all_logs(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User | None = Depends(get_optional_current_user)
 ):
     db.query(DetectionLog).delete()
     db.query(Alert).delete()
     db.commit()
+
+    try:
+        from websocket_manager import ws_manager
+        ws_manager.broadcast_sync({
+            "event": "DETECTION_LOGS_CLEARED",
+            "data": {}
+        })
+    except Exception:
+        pass
+
     return {"message": "All detection logs and alerts cleared successfully"}
 
 
@@ -126,7 +211,7 @@ def clear_all_logs(
 def delete_alert(
     alert_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User | None = Depends(get_optional_current_user)
 ):
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not alert:
@@ -137,17 +222,37 @@ def delete_alert(
 
     db.delete(alert)
     db.commit()
+
+    try:
+        from websocket_manager import ws_manager
+        ws_manager.broadcast_sync({
+            "event": "ALERT_DELETED",
+            "data": { "id": alert_id }
+        })
+    except Exception:
+        pass
+
     return {"message": "Alert deleted successfully", "id": alert_id}
 
 
 @router.delete("/alerts")
 def clear_all_alerts(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User | None = Depends(get_optional_current_user)
 ):
     db.query(Alert).delete()
     db.query(DetectionLog).filter(DetectionLog.status == "Flagged").delete(synchronize_session=False)
     db.commit()
+
+    try:
+        from websocket_manager import ws_manager
+        ws_manager.broadcast_sync({
+            "event": "ALERTS_CLEARED",
+            "data": {}
+        })
+    except Exception:
+        pass
+
     return {"message": "All security alerts cleared successfully"}
 
 
