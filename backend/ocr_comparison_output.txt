@@ -1,0 +1,35 @@
+==========================================================================================
+HEAD-TO-HEAD ACCURACY COMPARISON: OLD SERVER OCR vs NEW MOBILE OCR
+==========================================================================================
+
+[Image: crop1.jpg] (170x140)
+  OLD SERVER OCR (72 MB) -> Text: 'JJ-I--9 83-' | Conf: 0.5418 [Top: 'JJ-I--9', Bot: '83-']
+  NEW MOBILE OCR (7 MB)  -> Text: '5J-15 SP -2824' | Conf: 0.5698 [Top: '5J-15', Bot: 'SP -2824']
+
+[Image: crop2.jpg] (115x70)
+  OLD SERVER OCR (72 MB) -> Text: '- 1--' | Conf: 0.4168 [Top: '-', Bot: '1--']
+  NEW MOBILE OCR (7 MB)  -> Text: '-8244 -2824' | Conf: 0.3876 [Top: '-8244', Bot: '-2824']
+
+[Image: p2.jpg] (120x90)
+  OLD SERVER OCR (72 MB) -> Text: '- -' | Conf: 0.4017 [Top: '-', Bot: '-']
+  NEW MOBILE OCR (7 MB)  -> Text: '-282824 ---84' | Conf: 0.3915 [Top: '-282824', Bot: '---84']
+
+[Image: exact_tuk_tuk.jpg] (130x100)
+  OLD SERVER OCR (72 MB) -> Text: '- -' | Conf: 0.5576 [Top: '-', Bot: '-']
+  NEW MOBILE OCR (7 MB)  -> Text: '-44644 -828283' | Conf: 0.3667 [Top: '-44644', Bot: '-828283']
+
+[Image: exp_tuk_tuk.jpg] (135x80)
+  OLD SERVER OCR (72 MB) -> Text: '- -' | Conf: 0.4943 [Top: '-', Bot: '-']
+  NEW MOBILE OCR (7 MB)  -> Text: '-6-6 -6463' | Conf: 0.5343 [Top: '-6-6', Bot: '-6463']
+
+[Image: aqua_crop.png] (87x64)
+  OLD SERVER OCR (72 MB) -> Text: 'CA10 B260' | Conf: 0.9827 [Top: 'CA10', Bot: 'B260']
+  NEW MOBILE OCR (7 MB)  -> Text: 'WP C AA-86808 8-62626260' | Conf: 0.6163 [Top: 'WP C AA-86808', Bot: '8-62626260']
+
+[Image: top.png] (117x36)
+  OLD SERVER OCR (72 MB) -> Text: '301-' | Conf: 0.9301 [Top: '301-', Bot: '']
+  NEW MOBILE OCR (7 MB)  -> Text: '3--30101012' | Conf: 0.5870 [Top: '3--30101012', Bot: '']
+
+[Image: bot.png] (117x38)
+  OLD SERVER OCR (72 MB) -> Text: '3949' | Conf: 0.8518 [Top: '3949', Bot: '']
+  NEW MOBILE OCR (7 MB)  -> Text: '3-9949' | Conf: 0.8747 [Top: '3-9949', Bot: '']

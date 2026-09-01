@@ -1,54 +1,31 @@
-import easyocr
-import re
-import logging
+"""
+=========================================================
+Sri Lankan ANPR - OCR Recognition Wrapper
+=========================================================
+"""
 
-logger = logging.getLogger(__name__)
+import numpy as np
+from ai.modules.ocr_reader import OCRReader
+from ai.modules.validator import PlateValidator, normalize_plate
 
-class PlateOCR:
+
+class OCR:
     def __init__(self):
-        # Initialize the EasyOCR reader. 
-        # We specify English ('en') and disable GPU to run on standard CPU.
-        logger.info("Initializing EasyOCR Reader...")
-        self.reader = easyocr.Reader(['en'], gpu=False)
-        logger.info("EasyOCR Reader loaded successfully.")
+        self._reader = OCRReader()
+        self._validator = PlateValidator()
 
-    def extract_text(self, cropped_image_np):
+    def recognize(self, image: np.ndarray):
         """
-        Runs EasyOCR on a cropped license plate image.
-        Returns the cleaned string of the detected license plate.
+        Recognize text from plate image crop and normalize plate output.
         """
-        try:
-            # reader.readtext returns list of tuples: (bbox, text, confidence)
-            results = self.reader.readtext(cropped_image_np)
-            if not results:
-                return ""
-            
-            # Sort results by confidence and filter text
-            # Often, plates are read in one block, but sometimes they are read in chunks.
-            # We join them together.
-            extracted_texts = []
-            for bbox, text, confidence in results:
-                if confidence > 0.20:  # Conf threshold
-                    cleaned = self.clean_plate_text(text)
-                    if cleaned:
-                        extracted_texts.append(cleaned)
-            
-            final_text = "".join(extracted_texts)
-            return final_text
-            
-        except Exception as e:
-            logger.error(f"Error running OCR: {str(e)}")
-            return ""
-
-    def clean_plate_text(self, text):
-        """
-        Cleans the detected text to only keep alphanumeric characters, uppercase them.
-        """
-        if not text:
-            return ""
-        # Remove whitespace and non-alphanumeric characters, convert to uppercase
-        cleaned = re.sub(r'[^a-zA-Z0-9]', '', text)
-        return cleaned.upper()
-
-# Singleton instance
-ocr_engine = PlateOCR()
+        ocr_res = self._reader.read(image)
+        norm_res = self._validator.validate(ocr_res.get("text", ""))
+        
+        return {
+            "raw_text": ocr_res.get("text", ""),
+            "confidence": ocr_res.get("confidence", 0.0),
+            "normalized_plate": norm_res.get("normalized_plate", ""),
+            "plate_category": norm_res.get("plate_category", "Unknown"),
+            "valid": norm_res.get("valid", False),
+            "time_ms": ocr_res.get("time_ms", 0.0)
+        }
