@@ -32,6 +32,7 @@ Final Result
 import sys
 import time
 from pathlib import Path
+from typing import Dict, Any, Optional, List, Tuple
 
 # Pre-load PyTorch on Windows to avoid DLL runtime conflict with Paddle
 try:
@@ -55,6 +56,9 @@ try:
     from modules.validator import PlateValidator
     from modules.image_quality import ImageQualityAnalyzer
     from modules.retry_engine import RetryEngine
+    from modules.temporal_voter import TemporalPlateVoter
+    from modules.byte_tracker import ByteTracker
+    from modules.vehicle_detector import VehicleDetector
 except ImportError:
     from ai.modules.yolo_detector import YOLODetector
     from ai.modules.perspective import PerspectiveTransformer
@@ -63,6 +67,9 @@ except ImportError:
     from ai.modules.validator import PlateValidator
     from ai.modules.image_quality import ImageQualityAnalyzer
     from ai.modules.retry_engine import RetryEngine
+    from ai.modules.temporal_voter import TemporalPlateVoter
+    from ai.modules.byte_tracker import ByteTracker
+    from ai.modules.vehicle_detector import VehicleDetector
 
 
 _pipeline_instance = None
@@ -80,11 +87,28 @@ class ANPRPipeline:
     def __init__(self):
 
         print("=" * 60)
-        print("Initializing Sri Lankan ANPR Pipeline V4...")
+        print("Initializing Sri Lankan ANPR Pipeline V4 (Hierarchical Vehicle Tracking Active)...")
         print("=" * 60)
 
         # =================================================
-        # YOLO
+        # STAGE 1: VEHICLE BODY DETECTOR
+        # =================================================
+
+        self.vehicle_detector = VehicleDetector()
+
+        # =================================================
+        # BYTETRACK MULTI-OBJECT VEHICLE TRACKER
+        # =================================================
+
+        self.byte_tracker = ByteTracker(
+            track_thresh=0.35,
+            high_thresh=0.45,
+            match_thresh=0.80,
+            max_time_lost=30
+        )
+
+        # =================================================
+        # STAGE 2: LICENSE PLATE YOLO DETECTOR
         # =================================================
 
         self.detector = YOLODetector()
@@ -133,7 +157,18 @@ class ANPRPipeline:
             max_retries=1
         )
 
-        print("\nPipeline Ready!")
+        # =================================================
+        # TEMPORAL VOTER
+        # =================================================
+
+        self.temporal_voter = TemporalPlateVoter(
+            window_size=5,
+            min_confirmed_frames=2,
+            min_confirmed_confidence=0.80,
+            track_ttl_seconds=3.0
+        )
+
+        print("\nPipeline Ready (2-Stage Vehicle ByteTrack + Pre-OCR Quality Gate Active)!")
 
 
     # =====================================================
@@ -145,12 +180,65 @@ class ANPRPipeline:
         start = time.perf_counter()
 
         # =================================================
-        # YOLO DETECTION
+        # STAGE 1: VEHICLE DETECTION & BYTETRACK TRACKING
         # =================================================
 
-        detections = self.detector.detect(image)
+        vehicle_dets = self.vehicle_detector.detect(image)
+        active_vehicle_tracks = self.byte_tracker.update(vehicle_dets)
 
+        # =================================================
+        # STAGE 2: LICENSE PLATE DETECTION
+        # =================================================
+
+        plate_detections = self.detector.detect(image)
+
+        # Map each plate detection to its enclosing/nearest tracked vehicle
+        for plate in plate_detections:
+            p_bbox = plate.get("bbox")
+            if not p_bbox or len(p_bbox) < 4:
+                continue
+            pcx = (p_bbox[0] + p_bbox[2]) / 2.0
+            pcy = (p_bbox[1] + p_bbox[3]) / 2.0
+
+            matched_vtrack = None
+            min_dist = float("inf")
+
+            for vt in active_vehicle_tracks:
+                vbox = vt.tlbr
+                # Check if plate center is inside vehicle bbox (with 15% tolerance margin)
+                margin_x = (vbox[2] - vbox[0]) * 0.15
+                margin_y = (vbox[3] - vbox[1]) * 0.15
+                is_inside = (
+                    (vbox[0] - margin_x) <= pcx <= (vbox[2] + margin_x) and
+                    (vbox[1] - margin_y) <= pcy <= (vbox[3] + margin_y)
+                )
+
+                vcx, vcy = vt.centroid
+                dist = (pcx - vcx) ** 2 + (pcy - vcy) ** 2
+
+                if is_inside or dist < min_dist:
+                    min_dist = dist
+                    matched_vtrack = vt
+
+            if matched_vtrack is not None:
+                plate["track_id"] = matched_vtrack.track_id
+                plate["vehicle_track_id"] = matched_vtrack.track_id
+                plate["vehicle_bbox"] = [int(x) for x in matched_vtrack.tlbr]
+                plate["vehicle_category"] = matched_vtrack.det_meta.get("category", "Car")
+                plate["track_history"] = list(matched_vtrack.history)
+                plate["track_score"] = matched_vtrack.score
+            else:
+                plate["track_id"] = 1
+                plate["vehicle_track_id"] = 1
+                plate["vehicle_bbox"] = None
+                plate["vehicle_category"] = "Car"
+                plate["track_history"] = [(pcx, pcy)]
+                plate["track_score"] = float(plate.get("confidence", 0.8))
+
+        detections = plate_detections
         results = []
+
+
 
         # =================================================
         # PROCESS EACH PLATE
@@ -188,23 +276,42 @@ class ANPRPipeline:
                 )
 
                 # =========================================
-                # 2. RETRY ENGINE
-                #
-                # Inside RetryEngine:
-                #
-                # Perspective plate
-                #       ↓
-                # Adaptive upscale
-                #       ↓
-                # Quality analysis
-                #       ↓
-                # Preprocessing
-                #       ↓
-                # OCR
-                #       ↓
-                # Validation
-                #       ↓
-                # Retry if invalid
+                # 2. FAST PRE-OCR QUALITY GATE (<1ms)
+                # =========================================
+                is_q_ok, q_reason, q_metrics = self.quality_analyzer.is_quality_acceptable(
+                    rectified,
+                    min_blur=25.0,
+                    min_width=35,
+                    min_height=10
+                )
+
+                if not is_q_ok:
+                    print(f"\n[Quality Gate Filtered] {q_reason}")
+                    plate["quality"] = {
+                        "score": 25,
+                        "quality": "Poor",
+                        "blur": q_metrics.get("blur", 0.0),
+                        "brightness": q_metrics.get("brightness", 0.0),
+                        "reason": q_reason
+                    }
+                    plate["text"] = ""
+                    plate["ocr_confidence"] = 0.0
+                    plate["ocr_time_ms"] = 0.0
+                    plate["valid"] = False
+                    plate["plate_type"] = "Rejected"
+                    plate["validated_text"] = ""
+                    plate["raw_plate"] = ""
+                    plate["normalized_plate"] = ""
+                    plate["plate_category"] = "Rejected"
+                    plate["retry_time_ms"] = 0.0
+                    plate["retry_attempt"] = 0
+                    plate["upscale_factor"] = 1.0
+                    plate["retry_attempts"] = 0
+                    results.append(plate)
+                    continue
+
+                # =========================================
+                # 3. RETRY ENGINE (OCR & VALIDATION)
                 # =========================================
 
                 retry_start = time.perf_counter()
@@ -212,25 +319,6 @@ class ANPRPipeline:
                 ocr_result = self.retry_engine.recognize(
                     rectified
                 )
-
-                # Truncated Two-Line Plate Recovery:
-                # If OCR resulted in an invalid/incomplete plate (e.g. standalone "WP 5842"),
-                # perform an expanded upward crop from the original image to recover the top series digits.
-                if not ocr_result.get("valid") and plate.get("bbox") is not None:
-                    bx1, by1, bx2, by2 = plate["bbox"]
-                    bh = by2 - by1
-                    bw = bx2 - bx1
-                    exp_y1 = max(0, by1 - int(round(bh * 0.85)))
-                    exp_y2 = min(image.shape[0], by2 + int(round(bh * 0.15)))
-                    exp_x1 = max(0, bx1 - int(round(bw * 0.08)))
-                    exp_x2 = min(image.shape[1], bx2 + int(round(bw * 0.08)))
-
-                    if (exp_y2 - exp_y1) > bh + 8:
-                        exp_crop = image[exp_y1:exp_y2, exp_x1:exp_x2]
-                        if exp_crop.size > 0:
-                            exp_ocr = self.retry_engine.recognize(exp_crop)
-                            if exp_ocr.get("valid"):
-                                ocr_result = exp_ocr
 
                 retry_time = (
                     time.perf_counter()
@@ -242,7 +330,7 @@ class ANPRPipeline:
                 # =========================================
 
                 plate["quality"] = (
-                    ocr_result["quality"]
+                    ocr_result.get("quality")
                 )
 
                 # =========================================
@@ -267,6 +355,10 @@ class ANPRPipeline:
 
                 plate["valid"] = (
                     ocr_result["valid"]
+                )
+
+                plate["status"] = (
+                    ocr_result.get("status", "VALID" if ocr_result.get("valid") else "INVALID")
                 )
 
                 plate["plate_type"] = (
@@ -320,7 +412,41 @@ class ANPRPipeline:
                     )
 
                 # =========================================
-                # 8. ADD RESULT & EARLY EXIT ON VALID
+                # 8. TEMPORAL OBSERVATION & CONSENSUS
+                # =========================================
+
+                norm_text = plate.get("normalized_plate") or plate.get("validated_text") or ""
+                raw_text = plate.get("raw_plate") or plate.get("text", "")
+                conf_val = float(plate.get("ocr_confidence", 0.0))
+                q_score = float(plate.get("quality", {}).get("score", 80)) if isinstance(plate.get("quality"), dict) else 80.0
+                bbox_val = plate.get("bbox")
+                yolo_conf = float(plate.get("yolo_confidence", 0.80))
+                top_cand = ocr_result.get("top_candidate", "")
+                bot_cand = ocr_result.get("bot_candidate", "")
+
+                plate["top_candidate"] = top_cand
+                plate["bot_candidate"] = bot_cand
+
+                if (norm_text or raw_text or top_cand or bot_cand) and conf_val > 0.3:
+                    self.temporal_voter.add_observation(
+                        plate_text=norm_text,
+                        raw_text=raw_text,
+                        confidence=conf_val,
+                        quality_score=q_score,
+                        bbox=bbox_val,
+                        top_text=top_cand,
+                        bot_text=bot_cand,
+                        yolo_confidence=yolo_conf,
+                        category=plate.get("plate_category", "Standard"),
+                        valid=bool(plate.get("valid", False)),
+                        status=plate.get("status", "VALID")
+                    )
+
+                consensus = self.temporal_voter.get_consensus()
+                plate["consensus"] = consensus
+
+                # =========================================
+                # 9. ADD RESULT & EARLY EXIT ON VALID
                 # =========================================
 
                 results.append(plate)
@@ -345,6 +471,43 @@ class ANPRPipeline:
         ) * 1000
 
         return results, total_time
+
+    def get_voter(self) -> TemporalPlateVoter:
+        """Return the pipeline's temporal plate voter instance."""
+        return self.temporal_voter
+
+    def get_hardware_status(self) -> Dict[str, Any]:
+        """Return system-wide hardware acceleration status."""
+        from typing import Dict, Any
+        yolo_status = self.detector.get_device_status() if hasattr(self, "detector") else {}
+        ocr_status = self.ocr.get_device_status() if hasattr(self, "ocr") else {}
+        return {
+            "yolo": yolo_status,
+            "ocr": ocr_status,
+            "system": {
+                "cuda_available": yolo_status.get("cuda_available", False),
+                "gpu_name": yolo_status.get("gpu_hardware_name", "None"),
+                "vram_mb": yolo_status.get("vram_allocated_mb", 0.0)
+            }
+        }
+
+    def configure_devices(
+        self,
+        yolo_device: Optional[str] = None,
+        ocr_device: Optional[str] = None,
+        yolo_engine: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Hot-switch hardware devices for YOLO and/or OCR."""
+        from typing import Dict, Any, Optional
+        results = {}
+        if yolo_device is not None and hasattr(self, "detector"):
+            results["yolo"] = self.detector.switch_device(yolo_device, yolo_engine)
+        if ocr_device is not None and hasattr(self, "ocr"):
+            results["ocr"] = self.ocr.switch_device(ocr_device)
+
+        results["status"] = self.get_hardware_status()
+        return results
+
 
 
 # ==========================================================

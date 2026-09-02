@@ -8,23 +8,19 @@ from models import User
 from config import SECRET_KEY, ALGORITHM
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 
 def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
 ):
-
-    print("TOKEN RECEIVED:", token)
-
     try:
         payload = jwt.decode(
             token,
             SECRET_KEY,
             algorithms=[ALGORITHM]
         )
-
-        print("PAYLOAD:", payload)
 
         username = payload.get("sub")
 
@@ -56,6 +52,26 @@ def get_current_user(
     return user
 
 
+def get_optional_current_user(
+    token: str | None = Depends(oauth2_scheme_optional),
+    db: Session = Depends(get_db)
+) -> User | None:
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+        username = payload.get("sub")
+        if not username:
+            return None
+        return db.query(User).filter(User.username == username).first()
+    except Exception:
+        return None
+
+
 def get_current_admin_user(
     current_user: User = Depends(get_current_user)
 ):
@@ -64,4 +80,5 @@ def get_current_admin_user(
             status_code=403,
             detail="Admin privileges required"
         )
-    return current_user
+    return current_user
+

@@ -96,6 +96,7 @@ const translations = {
         cat_bus: "Bus",
         cat_car: "Car",
         cat_truck: "Truck",
+        cat_tuktuk: "Tuk Tuk",
         cat_van: "Van",
         choose_vehicle: "-- Choose Vehicle --",
         confirm_clear_all_alerts: "Are you sure you want to clear ALL security alerts?",
@@ -371,6 +372,7 @@ const translations = {
         cat_bus: "බස් රථ",
         cat_car: "මෝටර් රථ",
         cat_truck: "ලොරි / ට්‍රක්",
+        cat_tuktuk: "ත්‍රිරෝද රථ / Tuk Tuk",
         cat_van: "වෑන් රථ",
         choose_vehicle: "-- වාහනය තෝරන්න --",
         confirm_clear_all_alerts: "සියලුම ආරක්ෂක සංඥා මකා දැමීමට ඔබට සහතිකද?",
@@ -646,6 +648,7 @@ const translations = {
         cat_bus: "பேருந்து",
         cat_car: "கார்",
         cat_truck: "லாரி / டிரக்",
+        cat_tuktuk: "ஆட்டோ / Tuk Tuk",
         cat_van: "வேன்",
         choose_vehicle: "-- வாகனத்தை தேர்வுசெய்க --",
         confirm_clear_all_alerts: "அனைத்து பாதுகாப்பு எச்சரிக்கைகளையும் நிச்சயமாக நீக்க விரும்புகிறீர்களா?",
@@ -1030,6 +1033,7 @@ function initWebSocket() {
                     const data = payload.data || {};
                     // If flagged or alert, reload alerts dynamically and trigger siren
                     if (data.status === "Flagged" || payload.event === "DETECTION_ALERT") {
+                        if (typeof triggerSecuritySiren === "function") triggerSecuritySiren();
                         if (typeof loadAlerts === "function") loadAlerts();
                     }
 
@@ -1050,6 +1054,13 @@ function initWebSocket() {
                         }
                     } else {
                         if (typeof loadAlerts === "function") loadAlerts();
+                    }
+                } else if (payload.event === "ALERT_DELETED" || payload.event === "ALERTS_CLEARED" || payload.event === "DETECTION_LOG_DELETED" || payload.event === "DETECTION_LOGS_CLEARED") {
+                    if (typeof loadAlerts === "function") loadAlerts();
+                    if (typeof loadDashboardData === "function") loadDashboardData();
+                    const activeMenu = document.querySelector(".menu-item.active");
+                    if (activeMenu && activeMenu.id === "menu-records" && typeof loadRecords === "function") {
+                        loadRecords(currentRecordFilter || 'all');
                     }
                 }
             } catch (e) {
@@ -1103,9 +1114,21 @@ document.addEventListener("DOMContentLoaded", () => {
     // Connect Real-Time WebSocket for immediate live alert push
     initWebSocket();
 
+    // Populate camera source devices (DroidCam, built-in, etc.)
+    populateCameraDeviceList();
+
+    // Pre-fetch active alerts badge count
+    loadAlerts();
+
+    // Pre-fetch gate colliders for live overlay
+    fetch(API_URL + "/entrance/gate-colliders").then(r => r.json()).then(d => {
+        if (d && d.pin_a) gateColliderConfig = d;
+    }).catch(() => {});
+
     // Default Load Overview Tab
     switchTab("dashboard");
 });
+
 
 // ================= TAB SWITCHING =================
 function switchTab(tabId) {
@@ -1171,7 +1194,8 @@ function switchAdminSubtab(subtabId) {
         search: "adminSubtabSearch",
         analytics: "adminSubtabAnalytics",
         audit: "adminSubtabAudit",
-        controls: "adminSubtabControls"
+        controls: "adminSubtabControls",
+        gate: "adminSubtabGate"
     };
 
     const targetTab = document.getElementById(tabMap[subtabId] || `adminSubtab${subtabId}`);
@@ -1192,8 +1216,13 @@ function switchAdminSubtab(subtabId) {
         loadAdminAnalytics();
     } else if (subtabId === "audit") {
         loadAdminAuditLogs();
+    } else if (subtabId === "controls") {
+        loadAIEngineStatus();
+    } else if (subtabId === "gate") {
+        initGateCalibrationStudio();
     }
 }
+
 
 let allAdminUsersData = [];
 async function loadAdminUsers() {
@@ -1432,10 +1461,10 @@ async function loadAdminAnalytics() {
         adminCatChartInstance = new Chart(catCtx, {
             type: 'doughnut',
             data: {
-                labels: ['Cars', 'Bikes', 'Vans', 'Buses', 'Trucks'],
+                labels: ['Cars', 'Tuk Tuks', 'Bikes', 'Vans', 'Buses', 'Trucks'],
                 datasets: [{
-                    data: [12, 5, 4, 2, 1],
-                    backgroundColor: ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444']
+                    data: [12, 4, 5, 4, 2, 1],
+                    backgroundColor: ['#2563eb', '#16a34a', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444']
                 }]
             },
             options: { responsive: true, maintainAspectRatio: false }
@@ -1948,6 +1977,132 @@ function triggerGateOverride() {
 }
 
 
+// ================= AI ENGINE HARDWARE ACCELERATION CONTROLS (CPU / GPU) =================
+async function loadAIEngineStatus() {
+    try {
+        const data = await adminAPI.getAIEngineStatus();
+        if (!data) return;
+
+        // 1. Telemetry Banner
+        const gpuNameEl = document.getElementById("aiEngineGpuName");
+        const cudaStatusEl = document.getElementById("aiEngineCudaStatus");
+        const vramEl = document.getElementById("aiEngineVram");
+
+        const cudaAvail = data.system && data.system.cuda_available;
+        const gpuName = (data.system && data.system.gpu_name) || "No dedicated GPU detected";
+        const vram = (data.system && data.system.vram_mb) || 0.0;
+
+        if (gpuNameEl) gpuNameEl.innerText = gpuName;
+        if (cudaStatusEl) {
+            cudaStatusEl.innerText = cudaAvail ? "Active (CUDA)" : "Unavailable";
+            cudaStatusEl.style.color = cudaAvail ? "#10b981" : "#ef4444";
+        }
+        if (vramEl) vramEl.innerText = `${vram} MB`;
+
+        // 2. YOLO Status & Buttons
+        const yolo = data.yolo || {};
+        const isYoloGpu = yolo.is_gpu || (yolo.device && yolo.device.includes("cuda"));
+        const yoloBadge = document.getElementById("aiYoloActiveBadge");
+        const btnYoloGpu = document.getElementById("btnYoloGpu");
+        const btnYoloCpu = document.getElementById("btnYoloCpu");
+
+        if (yoloBadge) {
+            yoloBadge.innerText = yolo.device_name || (isYoloGpu ? "CUDA GPU" : "CPU");
+            yoloBadge.style.background = isYoloGpu ? "#ecfdf5" : "#f1f5f9";
+            yoloBadge.style.color = isYoloGpu ? "#059669" : "#475569";
+            yoloBadge.style.border = isYoloGpu ? "1px solid #a7f3d0" : "1px solid #cbd5e1";
+        }
+
+        if (btnYoloGpu && btnYoloCpu) {
+            if (isYoloGpu) {
+                btnYoloGpu.style.background = "#3b82f6";
+                btnYoloGpu.style.color = "#ffffff";
+                btnYoloGpu.style.borderColor = "#3b82f6";
+                btnYoloCpu.style.background = "#f8fafc";
+                btnYoloCpu.style.color = "#475569";
+                btnYoloCpu.style.borderColor = "#cbd5e1";
+            } else {
+                btnYoloCpu.style.background = "#3b82f6";
+                btnYoloCpu.style.color = "#ffffff";
+                btnYoloCpu.style.borderColor = "#3b82f6";
+                btnYoloGpu.style.background = "#f8fafc";
+                btnYoloGpu.style.color = "#475569";
+                btnYoloGpu.style.borderColor = "#cbd5e1";
+            }
+        }
+
+        // 3. OCR Status & Buttons
+        const ocr = data.ocr || {};
+        const isOcrGpu = ocr.is_gpu || ocr.device === "gpu";
+        const ocrBadge = document.getElementById("aiOcrActiveBadge");
+        const btnOcrGpu = document.getElementById("btnOcrGpu");
+        const btnOcrCpu = document.getElementById("btnOcrCpu");
+
+        if (ocrBadge) {
+            ocrBadge.innerText = ocr.device_name || (isOcrGpu ? "Paddle GPU" : "Intel oneDNN CPU");
+            ocrBadge.style.background = isOcrGpu ? "#ecfdf5" : "#eff6ff";
+            ocrBadge.style.color = isOcrGpu ? "#059669" : "#2563eb";
+            ocrBadge.style.border = isOcrGpu ? "1px solid #a7f3d0" : "1px solid #bfdbfe";
+        }
+
+        if (btnOcrGpu && btnOcrCpu) {
+            if (isOcrGpu) {
+                btnOcrGpu.style.background = "#3b82f6";
+                btnOcrGpu.style.color = "#ffffff";
+                btnOcrGpu.style.borderColor = "#3b82f6";
+                btnOcrCpu.style.background = "#f8fafc";
+                btnOcrCpu.style.color = "#475569";
+                btnOcrCpu.style.borderColor = "#cbd5e1";
+            } else {
+                btnOcrCpu.style.background = "#3b82f6";
+                btnOcrCpu.style.color = "#ffffff";
+                btnOcrCpu.style.borderColor = "#3b82f6";
+                btnOcrGpu.style.background = "#f8fafc";
+                btnOcrGpu.style.color = "#475569";
+                btnOcrGpu.style.borderColor = "#cbd5e1";
+            }
+        }
+    } catch (err) {
+        console.warn("Failed to load AI Engine status:", err);
+    }
+}
+
+async function switchYoloDevice(targetDevice, engine) {
+    try {
+        const payload = {
+            yolo_device: targetDevice,
+            yolo_engine: engine
+        };
+        const res = await adminAPI.updateAIEngineConfig(payload);
+        if (res && res.result && res.result.yolo && res.result.yolo.success === false) {
+            alert(`⚠️ YOLO Device Switch Warning: ${res.result.yolo.error}`);
+        } else {
+            alert(`✅ YOLO Detector switched to ${targetDevice === "cpu" ? "CPU (OpenVINO)" : "GPU (CUDA)"} successfully!`);
+        }
+        await loadAIEngineStatus();
+    } catch (err) {
+        alert("Failed to switch YOLO device: " + err.message);
+    }
+}
+
+async function switchOcrDevice(targetDevice) {
+    try {
+        const payload = {
+            ocr_device: targetDevice
+        };
+        const res = await adminAPI.updateAIEngineConfig(payload);
+        if (res && res.result && res.result.ocr && res.result.ocr.success === false) {
+            alert(`⚠️ OCR Device Switch Note: ${res.result.ocr.error}`);
+        } else {
+            alert(`✅ OCR Recognizer switched to ${targetDevice === "cpu" ? "CPU (Intel oneDNN)" : "GPU (CUDA)"} successfully!`);
+        }
+        await loadAIEngineStatus();
+    } catch (err) {
+        alert("Failed to switch OCR device: " + err.message);
+    }
+}
+
+
 // ================= LOGOUT =================
 function logout() {
     localStorage.removeItem("token");
@@ -2081,6 +2236,7 @@ async function loadOccupancyAnalytics() {
             const cc = data.category_counts || {};
             const cats = [
                 { name: 'Car', count: cc.Car || 0, color: '#2563eb', bg: 'rgba(37, 99, 235, 0.08)', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>' },
+                { name: 'Tuk Tuk', count: (cc['Tuk Tuk'] || cc.TukTuk || cc.TUKTUK || 0), color: '#16a34a', bg: 'rgba(22, 163, 74, 0.08)', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16l2.5-7.5A2 2 0 0 1 9.4 7H18a2 2 0 0 1 2 2v6H5"/><path d="M10 7v6h9"/><path d="M2 13h3"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>' },
                 { name: 'Bike', count: cc.Bike || 0, color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.08)', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6h2a2 2 0 0 1 2 2v2"/><path d="M12 17.5V14l-3-3 4-3 2 3h3"/></svg>' },
                 { name: 'Van', count: cc.Van || 0, color: '#0ea5e9', bg: 'rgba(14, 165, 233, 0.08)', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="18" height="11" rx="2"/><circle cx="6" cy="17" r="2"/><circle cx="15" cy="17" r="2"/><path d="M19 10h4l-1.5 5H19"/></svg>' },
                 { name: 'Bus', count: cc.Bus || 0, color: '#ef4444', bg: 'rgba(239, 68, 68, 0.08)', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="16" rx="2"/><path d="M4 11h16"/><path d="M8 15h.01"/><path d="M16 15h.01"/><path d="M6 19v2"/><path d="M18 19v2"/></svg>' },
@@ -2187,6 +2343,7 @@ function renderCategoryDistChart(counts) {
 
     const categories = [
         { key: 'Car', label: 'Car', icon: '🚘', color: '#2563eb' },
+        { key: 'Tuk Tuk', label: 'Tuk Tuk', icon: '🛺', color: '#16a34a' },
         { key: 'Truck', label: 'Truck', icon: '🚚', color: '#d97706' },
         { key: 'Van', label: 'Van', icon: '🚐', color: '#0ea5e9' },
         { key: 'Bike', label: 'Bike', icon: '🏍️', color: '#10b981' },
@@ -2410,6 +2567,7 @@ let isAutoLiveScanEnabled = true;
 let isScanInProgress = false;
 let currentScanAbortController = null;
 let scanWatchdogTimer = null;
+let currentCameraSessionId = 0;
 let lastLiveScannedPlate = "";
 let lastLiveScanTimestamp = 0;
 let autoScanPlateBuffer = {
@@ -2425,21 +2583,112 @@ let exitDetectionBuffer = {
 let lastAutoExitPlate = "";
 let lastAutoExitTimestamp = 0;
 
-function drawDetectionOverlay(bbox, plateText, confidence, status) {
+let isLiveGateLinesEnabled = true;
+let activeDetectionBboxData = null;
+let liveOverlayAnimationId = null;
+
+function toggleLiveGateLines() {
+    isLiveGateLinesEnabled = !isLiveGateLinesEnabled;
+    const btn = document.getElementById("btnToggleGateLines");
+    if (btn) {
+        btn.textContent = isLiveGateLinesEnabled ? "📏 Gate Lines: ON" : "📏 Gate Lines: OFF";
+        btn.style.background = isLiveGateLinesEnabled ? "rgba(59, 130, 246, 0.08)" : "transparent";
+        btn.style.borderColor = isLiveGateLinesEnabled ? "#3b82f6" : "var(--border-color)";
+        btn.style.color = isLiveGateLinesEnabled ? "#3b82f6" : "var(--text-muted)";
+    }
+}
+
+function startLiveOverlayLoop() {
+    stopLiveOverlayLoop();
+    function loop() {
+        const video = document.getElementById("webcamFeed");
+        const overlayCanvas = document.getElementById("detectionOverlayCanvas");
+        if (video && overlayCanvas && video.videoWidth > 0) {
+            if (overlayCanvas.width !== video.videoWidth || overlayCanvas.height !== video.videoHeight) {
+                overlayCanvas.width = video.videoWidth;
+                overlayCanvas.height = video.videoHeight;
+            }
+            const ctx = overlayCanvas.getContext("2d");
+            ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+            // 1. Draw Gate Colliders if enabled
+            if (isLiveGateLinesEnabled && typeof renderGateLinesOnLiveStream === "function") {
+                renderGateLinesOnLiveStream(overlayCanvas, video);
+            }
+
+            // 2. Draw recent bounding box if active (within last 1500ms)
+            // 2. Draw recent bounding box if active (within last 1500ms)
+            if (activeDetectionBboxData && (Date.now() - activeDetectionBboxData.timestamp < 1500)) {
+                drawBboxOnly(
+                    ctx,
+                    activeDetectionBboxData.bbox,
+                    activeDetectionBboxData.plateText,
+                    activeDetectionBboxData.confidence,
+                    activeDetectionBboxData.status,
+                    activeDetectionBboxData.vehicleBbox,
+                    activeDetectionBboxData.vehicleType,
+                    activeDetectionBboxData.trackId
+                );
+            }
+        }
+        liveOverlayAnimationId = requestAnimationFrame(loop);
+    }
+    liveOverlayAnimationId = requestAnimationFrame(loop);
+}
+
+function stopLiveOverlayLoop() {
+    if (liveOverlayAnimationId) {
+        cancelAnimationFrame(liveOverlayAnimationId);
+        liveOverlayAnimationId = null;
+    }
     const overlayCanvas = document.getElementById("detectionOverlayCanvas");
-    const video = document.getElementById("webcamFeed");
-    if (!overlayCanvas || !video || !video.videoWidth) return;
+    if (overlayCanvas) {
+        const ctx = overlayCanvas.getContext("2d");
+        ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    }
+}
 
-    overlayCanvas.width = video.videoWidth;
-    overlayCanvas.height = video.videoHeight;
-    const ctx = overlayCanvas.getContext("2d");
-    ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-
-    // Strictly require a valid YOLO bounding box - DO NOT draw fake default boxes
+function drawDetectionOverlay(bbox, plateText, confidence, status, vehicleBbox, vehicleType, trackId) {
     if (!bbox || !Array.isArray(bbox) || bbox.length < 4) {
         return;
     }
+    activeDetectionBboxData = {
+        bbox: bbox,
+        plateText: plateText,
+        confidence: confidence,
+        status: status,
+        vehicleBbox: vehicleBbox,
+        vehicleType: vehicleType || "Vehicle",
+        trackId: trackId || 1,
+        timestamp: Date.now()
+    };
+}
 
+function drawBboxOnly(ctx, bbox, plateText, confidence, status, vehicleBbox, vehicleType, trackId) {
+    // 1. Draw Vehicle Body Box (if detected)
+    if (vehicleBbox && Array.isArray(vehicleBbox) && vehicleBbox.length >= 4) {
+        const [vx1, vy1, vx2, vy2] = vehicleBbox;
+        const vW = vx2 - vx1;
+        const vH = vy2 - vy1;
+        if (vW > 0 && vH > 0) {
+            ctx.save();
+            ctx.strokeStyle = "rgba(14, 165, 233, 0.85)"; // Neon Blue
+            ctx.lineWidth = 2.5;
+            ctx.setLineDash([8, 6]);
+            ctx.strokeRect(vx1, vy1, vW, vH);
+
+            const vLabel = `🚙 [${vehicleType || "Vehicle"} #${trackId || 1}]`;
+            ctx.font = "bold 13px Inter, sans-serif";
+            const vTextW = ctx.measureText(vLabel).width;
+            ctx.fillStyle = "rgba(14, 165, 233, 0.9)";
+            ctx.fillRect(vx1, Math.max(0, vy1 - 22), vTextW + 12, 22);
+            ctx.fillStyle = "#ffffff";
+            ctx.fillText(vLabel, vx1 + 6, Math.max(16, vy1 - 6));
+            ctx.restore();
+        }
+    }
+
+    // 2. Draw License Plate Target Box
     const [x1, y1, x2, y2] = bbox;
     if (x2 <= x1 || y2 <= y1 || isNaN(x1) || isNaN(y1) || isNaN(x2) || isNaN(y2)) {
         return;
@@ -2449,43 +2698,36 @@ function drawDetectionOverlay(bbox, plateText, confidence, status) {
     const boxW = x2 - x1;
     const boxH = y2 - y1;
 
-    // 1. Draw glowing green bounding box
+    // Glowing green bounding box
     ctx.strokeStyle = boxColor;
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 3.5;
     ctx.strokeRect(x1, y1, boxW, boxH);
 
-    // 2. Draw corner targeting brackets
+    // Corner targeting brackets
     const cornerLen = Math.min(24, boxW * 0.2, boxH * 0.2);
-    ctx.lineWidth = 6;
+    ctx.lineWidth = 5;
     ctx.beginPath();
-    // Top-Left
     ctx.moveTo(x1, y1 + cornerLen); ctx.lineTo(x1, y1); ctx.lineTo(x1 + cornerLen, y1);
-    // Top-Right
     ctx.moveTo(x2 - cornerLen, y1); ctx.lineTo(x2, y1); ctx.lineTo(x2, y2 - cornerLen);
-    // Bottom-Right
     ctx.moveTo(x2, y2 - cornerLen); ctx.lineTo(x2, y2); ctx.lineTo(x2 - cornerLen, y2);
-    // Bottom-Left
     ctx.moveTo(x1 + cornerLen, y2); ctx.lineTo(x1, y2); ctx.lineTo(x1, y2 - cornerLen);
     ctx.stroke();
 
-    // 3. Draw Top Plate Label Banner
+    // Top Plate Label Banner
     const labelText = `🟩 ${plateText} (${confidence}%)`;
-    ctx.font = "bold 16px Inter, sans-serif";
+    ctx.font = "bold 15px Inter, sans-serif";
     const textWidth = ctx.measureText(labelText).width;
 
     ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
-    ctx.fillRect(x1, Math.max(0, y1 - 28), textWidth + 16, 28);
+    ctx.fillRect(x1, Math.max(0, y1 - 26), textWidth + 14, 26);
 
     ctx.fillStyle = "#ffffff";
-    ctx.fillText(labelText, x1 + 8, Math.max(20, y1 - 8));
+    ctx.fillText(labelText, x1 + 7, Math.max(18, y1 - 7));
 }
 
+
 function clearDetectionOverlay() {
-    const overlayCanvas = document.getElementById("detectionOverlayCanvas");
-    if (overlayCanvas) {
-        const ctx = overlayCanvas.getContext("2d");
-        ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-    }
+    activeDetectionBboxData = null;
 }
 
 function toggleAutoLiveScan() {
@@ -2516,7 +2758,33 @@ function stopAutoLiveScanLoop() {
     clearDetectionOverlay();
 }
 
+function calculatePlateGateTriggerLine(bbox, videoWidth, videoHeight) {
+
+    if (!bbox || !Array.isArray(bbox) || bbox.length < 4 || !gateColliderConfig) {
+        return "GREEN";
+    }
+
+    const [x1, y1, x2, y2] = bbox;
+    const centerX = (x1 + x2) / 2;
+    const centerY = (y1 + y2) / 2;
+
+    const normX = (centerX / (videoWidth || 640)) * 640;
+    const normY = (centerY / (videoHeight || 380)) * 380;
+
+    const pinA = gateColliderConfig.pin_a || { y: 140 };
+    const pinB = gateColliderConfig.pin_b || { y: 140 };
+    const pinC = gateColliderConfig.pin_c || { y: 340 };
+    const pinD = gateColliderConfig.pin_d || { y: 340 };
+
+    const redY = (pinA.y + pinB.y) / 2;
+    const greenY = (pinC.y + pinD.y) / 2;
+    const midY = (redY + greenY) / 2;
+
+    return normY < midY ? "RED" : "GREEN";
+}
+
 function scheduleNextAutoScan(delay = 100) {
+
     if (!isAutoLiveScanEnabled || !webcamStream) return;
     if (autoLiveScanTimeout) {
         clearTimeout(autoLiveScanTimeout);
@@ -2532,7 +2800,45 @@ function scheduleNextAutoScan(delay = 100) {
     }, delay);
 }
 
+async function populateCameraDeviceList() {
+    try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(d => d.kind === "videoinput");
+        const select = document.getElementById("cameraDeviceSelect");
+        if (!select) return;
+
+        const currentVal = select.value;
+        select.innerHTML = `<option value="">🎥 Auto Detect / Default Camera</option>`;
+        
+        videoDevices.forEach((device, index) => {
+            const opt = document.createElement("option");
+            opt.value = device.deviceId;
+            opt.innerText = device.label || `Camera ${index + 1} (${device.deviceId.slice(0, 8)}...)`;
+            if (device.label && (device.label.toLowerCase().includes("droidcam") || device.label.toLowerCase().includes("iriun"))) {
+                opt.innerText = "📱 " + opt.innerText;
+            }
+            select.appendChild(opt);
+        });
+
+        if (currentVal && Array.from(select.options).some(o => o.value === currentVal)) {
+            select.value = currentVal;
+        }
+    } catch (e) {
+        console.warn("Could not enumerate camera devices:", e);
+    }
+}
+
+async function onCameraDeviceChanged() {
+    if (webcamStream) {
+        stopCamera();
+        await startCamera();
+    }
+}
+
 async function startCamera() {
+    currentCameraSessionId++;
+    const thisSession = currentCameraSessionId;
     const video = document.getElementById("webcamFeed");
     try {
         // Hard reset in-flight state before starting
@@ -2546,12 +2852,25 @@ async function startCamera() {
         }
         isScanInProgress = false;
 
-        webcamStream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+        const select = document.getElementById("cameraDeviceSelect");
+        const selectedDeviceId = select ? select.value : "";
+
+        const videoConstraints = selectedDeviceId
+            ? { deviceId: { exact: selectedDeviceId } }
+            : true;
+
+        webcamStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
+        
+        // Refresh device labels once permission is granted
+        populateCameraDeviceList();
+
         if (video) {
             video.srcObject = webcamStream;
             video.onloadedmetadata = () => {
+                if (currentCameraSessionId !== thisSession) return;
                 video.play().catch(() => {});
                 console.log("Camera ready:", video.videoWidth, "x", video.videoHeight);
+                startLiveOverlayLoop();
                 if (isAutoLiveScanEnabled) {
                     startAutoLiveScanLoop();
                 }
@@ -2570,6 +2889,7 @@ async function startCamera() {
 }
 
 function stopCamera() {
+    currentCameraSessionId++;
     // 1. Abort any in-flight backend request
     if (currentScanAbortController) {
         try { currentScanAbortController.abort(); } catch (e) {}
@@ -2584,7 +2904,9 @@ function stopCamera() {
     isScanInProgress = false;
     // 4. Stop auto live scan loop
     stopAutoLiveScanLoop();
-    // 5. Release media tracks and clear video source
+    // 5. Stop live overlay animation loop
+    stopLiveOverlayLoop();
+    // 6. Release media tracks and clear video source
     if (webcamStream) {
         webcamStream.getTracks().forEach(track => track.stop());
         webcamStream = null;
@@ -2597,6 +2919,7 @@ function stopCamera() {
     clearDetectionOverlay();
     initCaptureLogs();
 }
+
 
 async function scanCurrentFrame(isAutoScan = false) {
     if (!webcamStream) {
@@ -2618,6 +2941,8 @@ async function scanCurrentFrame(isAutoScan = false) {
         return;
     }
 
+    const thisSessionId = currentCameraSessionId;
+
     const ctx = canvas.getContext("2d");
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -2628,18 +2953,18 @@ async function scanCurrentFrame(isAutoScan = false) {
     // Create fresh AbortController for this frame request
     currentScanAbortController = new AbortController();
 
-    // Setup 12-second watchdog timer to release lock if request hangs
+    // Safe generous 180-second watchdog timer to avoid premature abort on heavy CPU load
     if (scanWatchdogTimer) clearTimeout(scanWatchdogTimer);
     scanWatchdogTimer = setTimeout(() => {
-        if (isScanInProgress) {
-            console.warn("Scan watchdog: Request took over 12s, releasing lock and aborting.");
+        if (isScanInProgress && currentCameraSessionId === thisSessionId) {
+            console.warn("Scan watchdog: Request exceeded 180s timeout, releasing lock.");
             if (currentScanAbortController) {
                 try { currentScanAbortController.abort(); } catch (e) {}
                 currentScanAbortController = null;
             }
             isScanInProgress = false;
         }
-    }, 12000);
+    }, 180000);
 
     // Convert canvas to high-quality JPEG Blob
     canvas.toBlob(async (blob) => {
@@ -2676,9 +3001,21 @@ async function scanCurrentFrame(isAutoScan = false) {
                 signal: currentScanAbortController ? currentScanAbortController.signal : undefined
             });
 
+            // Guard against results returning after camera was stopped or switched
+            if (currentCameraSessionId !== thisSessionId || !webcamStream) {
+                console.log("Discarding scan result from inactive/previous camera session.");
+                return;
+            }
+
             if (!response.ok) throw new Error("Plate Scan failed");
             
             const data = await response.json();
+
+            // Guard against results parsed after session changed
+            if (currentCameraSessionId !== thisSessionId || !webcamStream) {
+                console.log("Discarding scan result from inactive/previous camera session.");
+                return;
+            }
             
             const detectedPlate = data.recognized_plate || data.raw_plate;
             const rawPlateClean = String(detectedPlate || '').replace(/[\s\-_]/g, '');
@@ -2687,7 +3024,7 @@ async function scanCurrentFrame(isAutoScan = false) {
             const isDetected = Boolean(data.detected === true) && hasBbox && rawPlateClean.length >= 4 && data.valid === true && confidence >= 70;
             const displayPlate = detectedPlate ? detectedPlate : "PLATE DETECTED";
             const category = data.plate_category || (isDetected ? "Standard" : "N/A");
-            const status = isDetected ? (data.status || (data.found ? "Allowed" : "Flagged")) : "No-Plate";
+            const status = isDetected ? (data.status || (data.found ? "Allowed" : "Pending Verification")) : "No-Plate";
             const owner = data.vehicle ? data.vehicle.owner_name : (isDetected ? "Unregistered" : "N/A");
             const isRegistered = Boolean((data.found === true || data.is_registered === true) && status === "Allowed" && (!data.vehicle || !data.vehicle.is_guest));
             const parkingInfo = data.parking_slot ? ` | Slot: <b>${data.parking_slot}</b>` : (data.parking_message ? ` | <i>${data.parking_message}</i>` : "");
@@ -2695,8 +3032,8 @@ async function scanCurrentFrame(isAutoScan = false) {
             const timestamp = new Date().toLocaleTimeString();
             const logBody = document.getElementById("liveCameraLogBody");
             
-            const borderColor = status === 'Allowed' ? 'var(--success-color)' : (isDetected ? 'var(--danger-color)' : 'var(--text-muted)');
-            const badgeClass = status === 'Allowed' ? 'allowed' : (isDetected ? 'flagged' : 'pending');
+            const borderColor = status === 'Allowed' ? 'var(--success-color)' : (status === 'Flagged' ? 'var(--danger-color)' : '#f59e0b');
+            const badgeClass = status === 'Allowed' ? 'allowed' : (status === 'Flagged' ? 'flagged' : 'pending');
 
             const now = Date.now();
 
@@ -2722,25 +3059,65 @@ async function scanCurrentFrame(isAutoScan = false) {
                     ` + logBody.innerHTML;
                 }
             } else {
-                // Real YOLO BBox overlay displayed immediately
-                drawDetectionOverlay(data.bbox, displayPlate, confidence, status);
+                const isConfirmedResult = data.is_confirmed !== false;
+                const consensusState = data.consensus_state || (isConfirmedResult ? 'confirmed' : 'voting');
+                
+                // Determine Gate Collision Zone (Red Outer Line vs Green Inner Line)
+                const triggerGateLine = calculatePlateGateTriggerLine(data.bbox, video.videoWidth, video.videoHeight);
+                const isParked = Boolean(data.is_parked === true);
+                const isStreetTraffic = (triggerGateLine === "RED" && !isParked) || Boolean(data.is_ignored === true);
+
+                let lineTag = triggerGateLine === "GREEN" ? "🟢 Green Line" : "🔴 Red Line";
+                const trackBadge = data.track_id ? `[Track #${data.track_id}] ` : "";
+                const overlayLabel = isStreetTraffic 
+                    ? `🛡️ ${trackBadge}[STREET TRAFFIC] ${displayPlate}`
+                    : (!isConfirmedResult ? `${trackBadge}[Voting ${data.agreeing_frames || 1}/${data.voting_frames || 2}] ${displayPlate}` : `${trackBadge}${lineTag} | ${displayPlate}`);
+
+                // Real YOLO BBox overlay displayed immediately with 2-Stage Vehicle + ByteTrack & line indicator
+                drawDetectionOverlay(
+                    data.bbox,
+                    overlayLabel,
+                    confidence,
+                    isStreetTraffic ? "Pending" : status,
+                    data.vehicle_bbox,
+                    data.vehicle_type,
+                    data.track_id
+                );
+
 
                 // Auto populate manual check input if empty or updated
                 const manualInput = document.querySelector('input[placeholder*="ENTER OR SCAN LICENSE PLATE"]');
-                if (manualInput) {
+                if (manualInput && isConfirmedResult && !isStreetTraffic) {
                     manualInput.value = displayPlate;
                 }
 
                 const isDuplicate = Boolean(data.is_duplicate === true);
-                const isParked = Boolean(data.is_parked === true);
                 const inTransitBuffer = Boolean(data.in_transit_buffer === true);
+                const inExitCooldown = Boolean(data.in_exit_cooldown === true || data.action_type === "exit_cooldown");
+                const exitCdRem = data.exit_cooldown_remaining_sec || 0;
                 const mode = getVerificationMode();
 
                 let logStatusText = status;
                 let logBadgeClass = badgeClass;
                 let logBorderColor = borderColor;
 
-                if (mode === "strict") {
+                if (isStreetTraffic) {
+                    logStatusText = "🛡️ Ignored (Street Traffic)";
+                    logBadgeClass = "pending";
+                    logBorderColor = "#64748b";
+                } else if (!isConfirmedResult) {
+                    logStatusText = `Voting (${data.agreeing_frames || 1}/${data.voting_frames || 2})`;
+                    logBadgeClass = "pending";
+                    logBorderColor = "#3b82f6";
+                } else if (inExitCooldown) {
+                    logStatusText = "Transit Cooldown";
+                    logBadgeClass = "pending";
+                    logBorderColor = "#f59e0b";
+                } else if (!isRegistered && !isParked) {
+                    logStatusText = "Pending Verification";
+                    logBadgeClass = "pending";
+                    logBorderColor = "#f59e0b";
+                } else if (mode === "strict") {
                     logStatusText = isParked ? "Strict: Exit Check" : "Strict: Entry Check";
                     logBadgeClass = "pending";
                     logBorderColor = "#f59e0b";
@@ -2756,27 +3133,62 @@ async function scanCurrentFrame(isAutoScan = false) {
                     }
                 }
 
-                if (!isDuplicate) {
+                // Multi-frame temporal consensus tracking
+                if (autoScanPlateBuffer.plate === displayPlate && (now - autoScanPlateBuffer.lastDetectedTime) < 30000) {
+                    autoScanPlateBuffer.count++;
+                } else {
+                    autoScanPlateBuffer.plate = displayPlate;
+                    autoScanPlateBuffer.count = 1;
+                }
+                autoScanPlateBuffer.lastDetectedTime = now;
+
+                const hasConsensus = isConfirmedResult && (!isAutoScan || isRegistered || autoScanPlateBuffer.count >= 2);
+
+                if (!isDuplicate && isConfirmedResult) {
                     lastLiveScannedPlate = displayPlate;
                     lastLiveScanTimestamp = Date.now();
 
-                    logBody.innerHTML = `
-                        <div class="log-entry" style="border-left: 4px solid ${logBorderColor}; padding-left: 10px; margin-bottom: 8px;">
-                            <div>
-                                <div style="font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 6px;">
-                                    <span class="plate-tag" style="padding: 2px 6px; font-size: 12px;">${displayPlate}</span>
-                                    <span style="font-size: 10px; background: rgba(0,0,0,0.06); padding: 2px 5px; border-radius: 4px;">${category}</span>
-                                </div>
-                                <div style="color: var(--text-muted); font-size: 11px; margin-top: 4px;">Time: ${timestamp} | Cam-01 Gate | Conf: ${confidence}% (${mode.toUpperCase()})</div>
-                                <div style="font-size: 12px; margin-top: 4px;">Owner: <b>${owner}</b>${parkingInfo}</div>
-                            </div>
-                            <span class="status-badge ${logBadgeClass}">
-                                ${logStatusText}
-                            </span>
-                        </div>
-                    ` + logBody.innerHTML;
+                    const trackPill = data.track_id ? `<span style="font-size: 10px; background: rgba(59, 130, 246, 0.12); color: #2563eb; padding: 2px 6px; border-radius: 4px; font-weight: 700;">Track #${data.track_id}</span>` : "";
 
-                    if (status === "Flagged" && mode !== "strict") {
+                    if (isStreetTraffic) {
+                        logBody.innerHTML = `
+                            <div class="log-entry" style="border-left: 4px solid #64748b; padding-left: 10px; margin-bottom: 8px; background: rgba(100, 116, 139, 0.05);">
+                                <div>
+                                    <div style="font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 6px;">
+                                        <span class="plate-tag" style="background: #e2e8f0; color: #334155; padding: 2px 6px; font-size: 12px;">${displayPlate}</span>
+                                        ${trackPill}
+                                        <span style="font-size: 11px; font-weight: 800; color: #dc2626;">🔴 RED LINE (OUTER GATE)</span>
+                                    </div>
+                                    <div style="color: #64748b; font-size: 11px; margin-top: 4px;">Time: ${timestamp} | Cam-01 Gate | Public Street Traffic Filtered</div>
+                                    <div style="font-size: 12px; margin-top: 4px; color: #475569;">🛡️ <b>Public Road Traffic Filtered</b>: Vehicle is passing on public street outside premises. No database entrance records created.</div>
+                                </div>
+                                <span class="status-badge" style="background: #e2e8f0; color: #475569;">
+                                    🛡️ Ignored
+                                </span>
+                            </div>
+                        ` + logBody.innerHTML;
+                    } else {
+                        logBody.innerHTML = `
+                            <div class="log-entry" style="border-left: 4px solid ${logBorderColor}; padding-left: 10px; margin-bottom: 8px;">
+                                <div>
+                                    <div style="font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 6px;">
+                                        <span class="plate-tag" style="padding: 2px 6px; font-size: 12px;">${displayPlate}</span>
+                                        <span style="font-size: 10px; background: rgba(0,0,0,0.06); padding: 2px 5px; border-radius: 4px;">${category}</span>
+                                        ${trackPill}
+                                        <span style="font-size: 11px; font-weight: 800; color: ${triggerGateLine === 'GREEN' ? '#16a34a' : '#dc2626'};">${triggerGateLine === 'GREEN' ? '🟢 GREEN (DRIVEWAY)' : '🔴 RED (OUTER GATE)'}</span>
+                                    </div>
+                                    <div style="color: var(--text-muted); font-size: 11px; margin-top: 4px;">Time: ${timestamp} | Cam-01 Gate | Conf: ${confidence}% (${mode.toUpperCase()})</div>
+                                    <div style="font-size: 12px; margin-top: 4px;">Owner: <b>${owner}</b>${parkingInfo}</div>
+                                </div>
+                                <span class="status-badge ${logBadgeClass}">
+                                    ${logStatusText}
+                                </span>
+                            </div>
+                        ` + logBody.innerHTML;
+                    }
+
+
+                    if (status === "Flagged" && mode !== "strict" && hasConsensus && !isStreetTraffic) {
                         triggerSecuritySiren();
                         if (typeof loadAlerts === "function") {
                             loadAlerts();
@@ -2789,7 +3201,7 @@ async function scanCurrentFrame(isAutoScan = false) {
 
                 // Verification check for Live Scan & Manual Frame Capture:
                 let shouldPromptVerification = false;
-                if (!isModalAlreadyOpen) {
+                if (!isModalAlreadyOpen && !isStreetTraffic) {
                     if (isParked) {
                         // Vehicle already on premises: ONLY process exit if 60s transit buffer has expired
                         if (!inTransitBuffer) {
@@ -2821,8 +3233,11 @@ async function scanCurrentFrame(isAutoScan = false) {
                             }
                         }
                     } else {
-                        // Arriving vehicle:
-                        if (mode === "strict") {
+                        // Arriving vehicle (Green line trigger):
+                        if (inExitCooldown) {
+                            // Vehicle in post-exit cooldown (< 60s since exit) -> DO NOT auto-admit or prompt entrance
+                            shouldPromptVerification = false;
+                        } else if (mode === "strict") {
                             // Strict Mode: ALWAYS prompt entrance verification modal for every arriving vehicle
                             shouldPromptVerification = true;
                         } else if (mode === "smart") {
@@ -2847,6 +3262,8 @@ async function scanCurrentFrame(isAutoScan = false) {
                         owner_name: owner,
                         is_parked: isParked,
                         in_transit_buffer: inTransitBuffer,
+                        in_exit_cooldown: inExitCooldown,
+                        exit_cooldown_remaining_sec: exitCdRem,
                         stay_seconds: data.stay_seconds !== undefined ? data.stay_seconds : (inTransitBuffer ? 0 : 999),
                         transit_remaining_sec: data.transit_remaining_sec || 0,
                         parking_slot: data.parking_slot || null
@@ -2854,7 +3271,11 @@ async function scanCurrentFrame(isAutoScan = false) {
                 }
             }
 
+
         } catch (err) {
+            if (currentCameraSessionId !== thisSessionId) {
+                return;
+            }
             if (err.name === "AbortError") {
                 console.log("Scan frame request aborted.");
             } else {
@@ -2869,7 +3290,9 @@ async function scanCurrentFrame(isAutoScan = false) {
             currentScanAbortController = null;
             isScanInProgress = false;
             // Schedule the NEXT frame scan only after current request is completed (one-frame-at-a-time)
-            if (isAutoScan && isAutoLiveScanEnabled && webcamStream) {
+            const confirmModal = document.getElementById("detectionConfirmModal");
+            const isModalOpen = confirmModal && (confirmModal.style.display === "flex" || confirmModal.style.display === "block");
+            if (isAutoScan && isAutoLiveScanEnabled && webcamStream && currentCameraSessionId === thisSessionId && !isModalOpen) {
                 scheduleNextAutoScan(100);
             }
         }
@@ -3397,62 +3820,110 @@ async function loadRecords(filterType = 'all') {
     }
 }
 
-function renderRecordsTable(filterType = 'all') {
+let detectionCurrentPage = 1;
+let detectionPageSize = 10;
+let detectionFilterType = 'all';
+
+function renderRecordsTable(filterType = null) {
+    if (filterType !== null && typeof filterType === 'string') {
+        detectionFilterType = filterType;
+    }
     const tbody = document.getElementById("recordsTableBody");
+    if (!tbody) return;
     tbody.innerHTML = "";
 
-    let filtered = allRecords;
-    if (filterType === 'allowed') {
-        filtered = allRecords.filter(r => r.status.toLowerCase() === 'allowed');
-    } else if (filterType === 'flagged') {
-        filtered = allRecords.filter(r => r.status.toLowerCase() === 'flagged');
-    } else if (filterType === 'denied') {
-        filtered = allRecords.filter(r => r.status.toLowerCase() === 'flagged' || r.status.toLowerCase() === 'denied');
+    const searchInput = document.getElementById("detectionSearchInput");
+    const q = searchInput ? searchInput.value.trim().toLowerCase() : "";
+    const cleanQ = q.replace(/[\s\-_]/g, "");
+
+    let filtered = allRecords || [];
+    if (detectionFilterType === 'allowed') {
+        filtered = filtered.filter(r => (r.status || '').toLowerCase() === 'allowed');
+    } else if (detectionFilterType === 'flagged') {
+        filtered = filtered.filter(r => (r.status || '').toLowerCase() === 'flagged');
+    } else if (detectionFilterType === 'denied') {
+        filtered = filtered.filter(r => (r.status || '').toLowerCase() === 'flagged' || (r.status || '').toLowerCase() === 'denied');
     }
 
-    if (filtered.length === 0) {
-        const noRecordsMsg = translations[currentLang].no_records_msg || "No records matching filter";
-        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 20px; color: var(--text-muted);">${noRecordsMsg}</td></tr>`;
-        return;
+    if (cleanQ) {
+        filtered = filtered.filter(r => {
+            const plate = (r.plate_number || '').toLowerCase().replace(/[\s\-_]/g, "");
+            const owner = (r.owner_name || '').toLowerCase().replace(/[\s\-_]/g, "");
+            const model = (r.vehicle_model || '').toLowerCase().replace(/[\s\-_]/g, "");
+            const id = String(r.id || '').toLowerCase();
+            return plate.includes(cleanQ) || owner.includes(cleanQ) || model.includes(cleanQ) || id.includes(cleanQ);
+        });
     }
 
-    filtered.forEach(log => {
-        const statusLower = log.status.toLowerCase();
-        let badgeClass = "allowed";
-        if (statusLower === "flagged") badgeClass = "flagged";
-        else if (statusLower === "denied") badgeClass = "denied";
+    const total = filtered.length;
+    const totalPages = Math.ceil(total / detectionPageSize) || 1;
+    if (detectionCurrentPage > totalPages) detectionCurrentPage = totalPages;
+    if (detectionCurrentPage < 1) detectionCurrentPage = 1;
 
-        const localizedStatus = translations[currentLang][`status_${statusLower}`] || log.status;
-        const deleteText = translations[currentLang].btn_delete || 'Delete';
+    const startIdx = (detectionCurrentPage - 1) * detectionPageSize;
+    const pageRecords = filtered.slice(startIdx, startIdx + detectionPageSize);
 
-        tbody.innerHTML += `
-            <tr>
-                <td>#D-${log.id}</td>
-                <td><span class="plate-tag">${log.plate_number}</span></td>
-                <td>${log.detection_time}</td>
-                <td>Cam-01 North Gate</td>
-                <td>${log.vehicle_model || "N/A"}</td>
-                <td>
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <span>${log.confidence}%</span>
-                        <div class="confidence-bar-container">
-                            <div class="confidence-bar" style="width: ${log.confidence}%;"></div>
+    if (total === 0) {
+        const noRecordsMsg = (translations[currentLang] && translations[currentLang].no_records_msg) || "No records matching filter";
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 25px; color: var(--text-muted);">${noRecordsMsg}</td></tr>`;
+    } else {
+        pageRecords.forEach(log => {
+            const statusLower = (log.status || '').toLowerCase();
+            let badgeClass = "allowed";
+            if (statusLower === "flagged") badgeClass = "flagged";
+            else if (statusLower === "denied") badgeClass = "denied";
+
+            const localizedStatus = (translations[currentLang] && translations[currentLang][`status_${statusLower}`]) || log.status;
+            const deleteText = (translations[currentLang] && translations[currentLang].btn_delete) || 'Delete';
+
+            tbody.innerHTML += `
+                <tr>
+                    <td>#D-${log.id}</td>
+                    <td><span class="plate-tag">${log.plate_number}</span></td>
+                    <td>${log.detection_time}</td>
+                    <td>Cam-01 North Gate</td>
+                    <td>${log.vehicle_model || "N/A"}</td>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span>${log.confidence}%</span>
+                            <div class="confidence-bar-container">
+                                <div class="confidence-bar" style="width: ${log.confidence}%;"></div>
+                            </div>
                         </div>
-                    </div>
-                </td>
-                <td>
-                    <span class="status-badge ${badgeClass}">
-                        <div class="status-dot-small"></div>
-                        ${localizedStatus}
-                    </span>
-                </td>
-                <td>${log.owner_name}</td>
-                <td>
-                    <button class="btn-action-delete" onclick="deleteLog(${log.id})" style="padding: 4px 8px; font-size: 11px;">${deleteText}</button>
-                </td>
-            </tr>
-        `;
-    });
+                    </td>
+                    <td>
+                        <span class="status-badge ${badgeClass}">
+                            <div class="status-dot-small"></div>
+                            ${localizedStatus}
+                        </span>
+                    </td>
+                    <td>${log.owner_name}</td>
+                    <td>
+                        <button class="btn-action-delete" onclick="deleteLog(${log.id})" style="padding: 4px 8px; font-size: 11px;">${deleteText}</button>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    const infoEl = document.getElementById("detectionPaginationInfo");
+    if (infoEl) {
+        const endIdx = Math.min(startIdx + detectionPageSize, total);
+        infoEl.innerText = total > 0 ? `Showing ${startIdx + 1} to ${endIdx} of ${total} entries` : `Showing 0 of 0 entries`;
+    }
+
+    renderPaginationControlsHelper("detectionPaginationControls", detectionCurrentPage, totalPages, "goToDetectionPage");
+}
+
+function changeDetectionPageSize(val) {
+    detectionPageSize = parseInt(val, 10) || 10;
+    detectionCurrentPage = 1;
+    renderRecordsTable();
+}
+
+function goToDetectionPage(p) {
+    detectionCurrentPage = p;
+    renderRecordsTable();
 }
 
 async function deleteLog(logId) {
@@ -3517,6 +3988,7 @@ function filterRecords(filterType) {
         activeBtn.style.borderColor = "var(--accent-color)";
     }
 
+    detectionCurrentPage = 1;
     renderRecordsTable(filterType);
 }
 
@@ -3562,22 +4034,25 @@ function closeVehiclesManagerModal() {
 }
 
 // ================= SECURITY ALERTS LOGS =================
+let allAlerts = [];
+let alertsCurrentPage = 1;
+let alertsPageSize = 10;
+
 async function loadAlerts() {
     try {
-        const response = await fetch(API_URL + "/alerts", {
-            headers: { "Authorization": "Bearer " + token }
-        });
+        const curToken = localStorage.getItem("token");
+        const headers = curToken ? { "Authorization": "Bearer " + curToken } : {};
+        const response = await fetch(API_URL + "/alerts", { headers });
         if (!response.ok) throw new Error("Alerts load failed");
 
         const alerts = await response.json();
-        const tbody = document.getElementById("alertsTableBody");
-        tbody.innerHTML = "";
+        allAlerts = Array.isArray(alerts) ? alerts : [];
 
         // Update sidebar red alerts badge
         const badge = document.getElementById("alerts-badge");
         if (badge) {
-            if (alerts && alerts.length > 0) {
-                badge.innerText = alerts.length;
+            if (allAlerts && allAlerts.length > 0) {
+                badge.innerText = allAlerts.length;
                 badge.style.display = "inline-block";
             } else {
                 badge.innerText = "0";
@@ -3585,31 +4060,87 @@ async function loadAlerts() {
             }
         }
 
-        if (!alerts || alerts.length === 0) {
-            const noAlertsMsg = (translations[currentLang] && translations[currentLang].no_alerts_msg) ? translations[currentLang].no_alerts_msg : 'No active security alerts';
-            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 30px; color: var(--text-muted);">${noAlertsMsg}</td></tr>`;
-            return;
-        }
+        alertsCurrentPage = 1;
+        filterAlertsTable();
+    } catch (err) {
+        console.error("Load alerts error:", err);
+    }
+}
 
-        alerts.forEach(alert => {
-            const time = new Date(alert.alert_time).toLocaleTimeString();
-            const deleteText = translations[currentLang].btn_delete || 'Delete';
+function filterAlertsTable() {
+    const tbody = document.getElementById("alertsTableBody");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+
+    const searchInput = document.getElementById("alertsSearchInput");
+    const q = searchInput ? searchInput.value.trim().toLowerCase() : "";
+    const cleanQ = q.replace(/[\s\-_]/g, "");
+
+    let filtered = allAlerts || [];
+    if (cleanQ) {
+        filtered = filtered.filter(a => {
+            const plate = (a.plate_number || '').toLowerCase().replace(/[\s\-_]/g, "");
+            const reason = (a.reason || '').toLowerCase().replace(/[\s\-_]/g, "");
+            const id = String(a.id || '').toLowerCase();
+            return plate.includes(cleanQ) || reason.includes(cleanQ) || id.includes(cleanQ);
+        });
+    }
+
+    const total = filtered.length;
+    const totalPages = Math.ceil(total / alertsPageSize) || 1;
+    if (alertsCurrentPage > totalPages) alertsCurrentPage = totalPages;
+    if (alertsCurrentPage < 1) alertsCurrentPage = 1;
+
+    const startIdx = (alertsCurrentPage - 1) * alertsPageSize;
+    const pageRecords = filtered.slice(startIdx, startIdx + alertsPageSize);
+
+    if (total === 0) {
+        const noAlertsMsg = (translations[currentLang] && translations[currentLang].no_alerts_msg) ? translations[currentLang].no_alerts_msg : 'No active security alerts';
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 30px; color: var(--text-muted); font-size: 13px;">${noAlertsMsg}</td></tr>`;
+    } else {
+        pageRecords.forEach(alert => {
+            const time = alert.alert_time ? new Date(alert.alert_time).toLocaleString() : 'N/A';
+            const deleteText = (translations[currentLang] && translations[currentLang].btn_delete) ? translations[currentLang].btn_delete : 'Delete';
+            const snapUrl = alert.snapshot ? resolveSnapshotUrl(alert.snapshot) : null;
+            const snapHtml = snapUrl ? `
+                <div style="display: inline-flex; align-items: center; gap: 6px;">
+                    <img src="${snapUrl}" alt="Vehicle" style="width: 54px; height: 38px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border-color); cursor: pointer; background: #000;" onclick="previewVehicleImage('${snapUrl}')" title="Click to enlarge" onerror="this.onerror=null; this.outerHTML='<span style=\\'font-size:11px;color:var(--text-muted);\\'>${alert.snapshot}</span>'" />
+                </div>
+            ` : '<span style="color: var(--text-muted); font-size: 11px;">No Snapshot</span>';
+
             tbody.innerHTML += `
                 <tr>
-                    <td>#AL-${alert.id}</td>
-                    <td><span class="plate-tag" style="background-color: var(--danger-color);">${alert.plate_number}</span></td>
-                    <td>${time}</td>
-                    <td style="color: var(--danger-color); font-weight: 600;">${alert.reason}</td>
-                    <td>${alert.snapshot || 'N/A'}</td>
+                    <td><strong>#AL-${alert.id}</strong></td>
+                    <td><span class="plate-tag" style="background-color: var(--danger-color); color: white;">${alert.plate_number}</span></td>
+                    <td style="font-size: 12px; white-space: nowrap;">${time}</td>
+                    <td style="color: var(--danger-color); font-weight: 600; font-size: 12px;">${alert.reason || 'Security Alert'}</td>
+                    <td>${snapHtml}</td>
                     <td>
-                        <button class="btn-action-delete" onclick="deleteAlert(${alert.id})" style="padding: 4px 8px; font-size: 11px;">${deleteText}</button>
+                        <button class="btn-action-delete" onclick="deleteAlert(${alert.id})" style="padding: 4px 10px; font-size: 11px; cursor: pointer;">${deleteText}</button>
                     </td>
                 </tr>
             `;
         });
-    } catch (err) {
-        console.error("Load alerts error:", err);
     }
+
+    const infoEl = document.getElementById("alertsPaginationInfo");
+    if (infoEl) {
+        const endIdx = Math.min(startIdx + alertsPageSize, total);
+        infoEl.innerText = total > 0 ? `Showing ${startIdx + 1} to ${endIdx} of ${total} entries` : `Showing 0 of 0 entries`;
+    }
+
+    renderPaginationControlsHelper("alertsPaginationControls", alertsCurrentPage, totalPages, "goToAlertsPage");
+}
+
+function changeAlertsPageSize(val) {
+    alertsPageSize = parseInt(val, 10) || 10;
+    alertsCurrentPage = 1;
+    filterAlertsTable();
+}
+
+function goToAlertsPage(p) {
+    alertsCurrentPage = p;
+    filterAlertsTable();
 }
 
 // ================= EDITING WEBCAM SNAPSHOT =================
@@ -3908,63 +4439,125 @@ async function loadParkingData() {
             }, 50);
         }
 
-        // Render history table
-        const historyBody = document.getElementById("parkingHistoryTableBody");
-        if (historyBody) {
-            historyBody.innerHTML = "";
-
-            if (history.length === 0) {
-                historyBody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--text-muted); padding: 20px;">${translations[currentLang].history_empty}</td></tr>`;
-            } else {
-                const sortedHistory = [...history].sort((a, b) => b.session_id - a.session_id);
-                
-                sortedHistory.forEach(sess => {
-                    const isCompleted = sess.status.toLowerCase() === "completed";
-                    const sessStatusText = isCompleted ? translations[currentLang].status_completed : translations[currentLang].status_active;
-                    const statusColor = isCompleted ? "var(--text-muted)" : "var(--danger-color)";
-                    const statusBg = isCompleted ? "var(--accent-light)" : "var(--danger-light)";
-                    
-                    let deleteBtnHtml = `
-                        <button onclick="deleteParkingLog(${sess.session_id})" class="btn-action-delete" style="padding: 4px 8px; font-size: 11px;">
-                            ${translations[currentLang].btn_delete || 'Delete'}
-                        </button>
-                    `;
-                    
-                    let actionHtml = deleteBtnHtml;
-                    if (!isCompleted) {
-                        actionHtml = `
-                            <div style="display: inline-flex; gap: 4px; align-items: center;">
-                                <button onclick="releaseParkingSlot(${sess.session_id})" class="btn-secondary" style="width: auto; padding: 4px 10px; font-size: 11px; background: var(--danger-light); color: var(--danger-color); border-color: var(--danger-color);">
-                                    ${translations[currentLang].btn_release}
-                                </button>
-                                ${deleteBtnHtml}
-                            </div>
-                        `;
-                    }
-
-                    historyBody.innerHTML += `
-                        <tr>
-                            <td>#PS-${sess.session_id}</td>
-                            <td><span class="plate-tag">${sess.plate_number || "UNKNOWN"}</span></td>
-                            <td><strong>${sess.slot_number || "-"}</strong></td>
-                            <td style="font-size: 12px;">${formatParkingTime(sess.entry_time)}</td>
-                            <td style="font-size: 12px;">${sess.exit_time ? formatParkingTime(sess.exit_time) : "-"}</td>
-                            <td>
-                                <span class="status-badge" style="color: ${statusColor}; background-color: ${statusBg}; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600;">
-                                    <div style="width: 6px; height: 6px; border-radius: 50%; background-color: ${statusColor};"></div>
-                                    ${sessStatusText}
-                                </span>
-                            </td>
-                            <td>${actionHtml}</td>
-                        </tr>
-                    `;
-                });
-            }
-        }
+        // Save history and render table with pagination and filters
+        allParkingHistory = Array.isArray(history) ? history : [];
+        filterParkingHistoryTable();
 
     } catch (err) {
         console.error("Load parking data error:", err);
     }
+}
+
+let allParkingHistory = [];
+let parkingCurrentPage = 1;
+let parkingPageSize = 10;
+
+function filterParkingHistoryTable() {
+    const historyBody = document.getElementById("parkingHistoryTableBody");
+    if (!historyBody) return;
+
+    const searchInput = document.getElementById("parkingSearchInput");
+    const statusSelect = document.getElementById("parkingStatusFilter");
+
+    const q = searchInput ? searchInput.value.trim().toLowerCase() : "";
+    const cleanQ = q.replace(/[\s\-_]/g, "");
+    const statusVal = statusSelect ? statusSelect.value : "all";
+
+    let filtered = [...allParkingHistory];
+
+    if (statusVal === "active") {
+        filtered = filtered.filter(s => s.status && s.status.toLowerCase() !== "completed");
+    } else if (statusVal === "completed") {
+        filtered = filtered.filter(s => s.status && s.status.toLowerCase() === "completed");
+    }
+
+    if (cleanQ) {
+        filtered = filtered.filter(sess => {
+            const plate = (sess.plate_number || "").toLowerCase().replace(/[\s\-_]/g, "");
+            const slot = (sess.slot_number || "").toLowerCase().replace(/[\s\-_]/g, "");
+            const sessId = String(sess.session_id || "").toLowerCase();
+            return plate.includes(cleanQ) || slot.includes(cleanQ) || sessId.includes(cleanQ);
+        });
+    }
+
+    // Sort descending by session_id (latest session first)
+    filtered.sort((a, b) => (b.session_id || 0) - (a.session_id || 0));
+
+    const total = filtered.length;
+    const totalPages = Math.ceil(total / parkingPageSize) || 1;
+    if (parkingCurrentPage > totalPages) parkingCurrentPage = totalPages;
+    if (parkingCurrentPage < 1) parkingCurrentPage = 1;
+
+    const startIdx = (parkingCurrentPage - 1) * parkingPageSize;
+    const pageRecords = filtered.slice(startIdx, startIdx + parkingPageSize);
+
+    historyBody.innerHTML = "";
+
+    if (total === 0) {
+        const emptyMsg = (translations[currentLang] && translations[currentLang].history_empty) || "No parking history records found";
+        historyBody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--text-muted); padding: 30px;">${emptyMsg}</td></tr>`;
+    } else {
+        pageRecords.forEach(sess => {
+            const isCompleted = sess.status && sess.status.toLowerCase() === "completed";
+            const sessStatusText = isCompleted ? ((translations[currentLang] && translations[currentLang].status_completed) || "Completed") : ((translations[currentLang] && translations[currentLang].status_active) || "Active");
+            const statusColor = isCompleted ? "var(--text-muted)" : "var(--danger-color)";
+            const statusBg = isCompleted ? "var(--accent-light)" : "var(--danger-light)";
+
+            let deleteBtnHtml = `
+                <button onclick="deleteParkingLog(${sess.session_id})" class="btn-action-delete" style="padding: 4px 8px; font-size: 11px;">
+                    ${(translations[currentLang] && translations[currentLang].btn_delete) || 'Delete'}
+                </button>
+            `;
+
+            let actionHtml = deleteBtnHtml;
+            if (!isCompleted) {
+                actionHtml = `
+                    <div style="display: inline-flex; gap: 4px; align-items: center;">
+                        <button onclick="releaseParkingSlot(${sess.session_id})" class="btn-secondary" style="width: auto; padding: 4px 10px; font-size: 11px; background: var(--danger-light); color: var(--danger-color); border-color: var(--danger-color);">
+                            ${(translations[currentLang] && translations[currentLang].btn_release) || 'Release Slot'}
+                        </button>
+                        ${deleteBtnHtml}
+                    </div>
+                `;
+            }
+
+            historyBody.innerHTML += `
+                <tr>
+                    <td>#PS-${sess.session_id}</td>
+                    <td><span class="plate-tag">${sess.plate_number || "UNKNOWN"}</span></td>
+                    <td><strong>${sess.slot_number || "-"}</strong></td>
+                    <td style="font-size: 12px;">${formatParkingTime(sess.entry_time)}</td>
+                    <td style="font-size: 12px;">${sess.exit_time ? formatParkingTime(sess.exit_time) : "-"}</td>
+                    <td>
+                        <span class="status-badge" style="color: ${statusColor}; background-color: ${statusBg}; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600;">
+                            <div style="width: 6px; height: 6px; border-radius: 50%; background-color: ${statusColor};"></div>
+                            ${sessStatusText}
+                        </span>
+                    </td>
+                    <td>${actionHtml}</td>
+                </tr>
+            `;
+        });
+    }
+
+    const infoEl = document.getElementById("parkingPaginationInfo");
+    if (infoEl) {
+        const endIdx = Math.min(startIdx + parkingPageSize, total);
+        infoEl.innerText = total > 0 ? `Showing ${startIdx + 1} to ${endIdx} of ${total} entries` : `Showing 0 of 0 entries`;
+    }
+
+    renderPaginationControlsHelper("parkingPaginationControls", parkingCurrentPage, totalPages, "goToParkingPage");
+}
+
+function changeParkingPageSize(val) {
+    parkingPageSize = parseInt(val, 10) || 10;
+    parkingCurrentPage = 1;
+    filterParkingHistoryTable();
+}
+
+function goToParkingPage(p) {
+    parkingCurrentPage = p;
+    filterParkingHistoryTable();
 }
 
 async function initializeParkingSlots() {
@@ -4098,7 +4691,7 @@ function showExitReceiptModal(data) {
     if (!modal || !body) return;
 
     const catKey = (data.category || 'car').toLowerCase();
-    const icon = catKey === 'bike' ? '🏍️' : catKey === 'van' ? '🚐' : catKey === 'bus' ? '🚌' : catKey === 'truck' ? '🚚' : '🚗';
+    const icon = catKey === 'bike' ? '🏍️' : catKey === 'van' ? '🚐' : catKey === 'bus' ? '🚌' : catKey === 'truck' ? '🚚' : (catKey === 'tuktuk' || catKey === 'tuk tuk' || catKey === 'three wheeler') ? '🛺' : '🚗';
 
     body.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px dashed #e2e8f0; padding-bottom: 12px; margin-bottom: 12px;">
@@ -4243,14 +4836,19 @@ async function clearAllParkingLogs() {
 }
 
 async function deleteAlert(alertId) {
-    if (!confirm("Are you sure you want to delete this security alert?")) {
+    const confirmMsg = (translations[currentLang] && translations[currentLang].confirm_delete_alert) 
+        ? translations[currentLang].confirm_delete_alert 
+        : "Are you sure you want to delete this security alert?";
+    if (!confirm(confirmMsg)) {
         return;
     }
 
     try {
+        const curToken = localStorage.getItem("token");
+        const headers = curToken ? { "Authorization": "Bearer " + curToken } : {};
         const response = await fetch(API_URL + "/alerts/" + alertId, {
             method: "DELETE",
-            headers: { "Authorization": "Bearer " + token }
+            headers: headers
         });
 
         if (!response.ok) {
@@ -4267,14 +4865,19 @@ async function deleteAlert(alertId) {
 }
 
 async function clearAllAlerts() {
-    if (!confirm("Are you sure you want to clear ALL security alerts?")) {
+    const confirmMsg = (translations[currentLang] && translations[currentLang].confirm_clear_all_alerts)
+        ? translations[currentLang].confirm_clear_all_alerts
+        : "Are you sure you want to clear ALL security alerts?";
+    if (!confirm(confirmMsg)) {
         return;
     }
 
     try {
+        const curToken = localStorage.getItem("token");
+        const headers = curToken ? { "Authorization": "Bearer " + curToken } : {};
         const response = await fetch(API_URL + "/alerts", {
             method: "DELETE",
-            headers: { "Authorization": "Bearer " + token }
+            headers: headers
         });
 
         if (!response.ok) {
@@ -5416,7 +6019,24 @@ async function processArrivalGateManual(targetPlate, bypassVerification = false)
             const slotName = data.slot_name || (data.record && data.record.parking_slot) || "Assigned";
             const isGuest = data.is_guest || (data.vehicle && data.vehicle.is_guest);
             const cat = (data.category || (data.vehicle && data.vehicle.category) || 'Car').toUpperCase();
-            const icon = cat === 'BIKE' ? '🏍️' : cat === 'VAN' ? '🚐' : cat === 'BUS' ? '🚌' : cat === 'TRUCK' ? '🚚' : '🚗';
+            const icon = cat === 'BIKE' ? '🏍️' : cat === 'VAN' ? '🚐' : cat === 'BUS' ? '🚌' : cat === 'TRUCK' ? '🚚' : (cat === 'TUK TUK' || cat === 'TUKTUK' || cat === 'THREE WHEELER') ? '🛺' : '🚗';
+
+            if (data.in_post_exit_cooldown) {
+                if (resultEl) {
+                    resultEl.innerHTML = `
+                        <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; padding: 14px; font-size: 13px;">
+                            <div style="font-weight: 800; color: #b45309; font-size: 15px; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+                                <span>⏳ POST-EXIT TRANSIT COOLDOWN ACTIVE</span>
+                                <span style="font-size: 11px; background: #f59e0b; color: white; padding: 3px 10px; border-radius: 10px;">ENTRY LOCKED</span>
+                            </div>
+                            <div style="color: #92400e; font-size: 13px; margin-top: 6px;">
+                                Vehicle <strong>${returnedPlate}</strong> recently exited. Re-entry is locked for <strong>${data.exit_cooldown_remaining_sec || 60}s</strong> while the vehicle departs the gate.
+                            </div>
+                        </div>
+                    `;
+                }
+                return;
+            }
 
             if (resultEl) {
                 resultEl.innerHTML = `
@@ -5463,6 +6083,7 @@ async function processArrivalGateManual(targetPlate, bypassVerification = false)
                                 <label style="font-size: 11px; font-weight: 700; color: #78350f; display: block; margin-bottom: 4px;">Vehicle Category</label>
                                 <select id="inlineGuestCategory" class="form-input" style="height: 36px; font-size: 12px; background: white; border-color: #fcd34d; font-weight: bold; color: var(--text-main);">
                                     <option value="Car">Car</option>
+                                    <option value="Tuk Tuk">Tuk Tuk</option>
                                     <option value="Bike">Bike</option>
                                     <option value="Van">Van</option>
                                     <option value="Bus">Bus</option>
@@ -5610,6 +6231,7 @@ async function denyGuestVehicleEntry() {
     }
 
     loadDashboardData();
+    triggerSecuritySiren();
     if (typeof loadAlerts === "function") loadAlerts();
     if (typeof loadSecurityAlerts === "function") loadSecurityAlerts();
 }
@@ -5994,28 +6616,45 @@ async function showDetectionConfirmModal(data) {
         if (titleEl) titleEl.innerText = t.modal_verif_title || "Vehicle Detection Verification";
         if (subtitleEl) subtitleEl.innerText = t.modal_verif_sub || "Review vehicle snapshot and confirm entrance authorization";
 
-        if (statusBadgeEl) {
-            if (data.is_registered) {
-                statusBadgeEl.innerHTML = `🟢 <strong>Registered Vehicle</strong><br><span style="font-size:11px; font-weight: normal; color:#64748b;">Owner: ${data.owner_name || 'System Registry'}</span>`;
-                statusBadgeEl.style.color = "#047857";
-            } else {
-                statusBadgeEl.innerHTML = `🛑 <strong style="color: #b91c1c;">UNREGISTERED VEHICLE (BARRIER LOCKED)</strong><br><span style="font-size:11px; font-weight: 600; color:#d97706;">Officer Guest Pass Authorization Required</span>`;
-                statusBadgeEl.style.color = "#b91c1c";
-            }
-        }
+        const inExitCooldown = Boolean(data.in_exit_cooldown === true || data.action_type === "exit_cooldown");
+        const exitCdRem = data.exit_cooldown_remaining_sec || 0;
 
-        if (approveBtn) {
-            approveBtn.disabled = false;
-            if (data.is_registered) {
-                approveBtn.innerHTML = t.btn_confirm_grant_entrance || `🟢 Confirm & Grant Entrance`;
-                approveBtn.style.background = "#10b981";
-                approveBtn.style.borderColor = "#10b981";
-            } else {
-                approveBtn.innerHTML = `🙋‍♂️ Authorize Guest Pass`;
-                approveBtn.style.background = "#f59e0b";
-                approveBtn.style.borderColor = "#d97706";
+        if (inExitCooldown && exitCdRem > 0) {
+            if (statusBadgeEl) {
+                statusBadgeEl.innerHTML = `⏳ <strong style="color: #d97706;">Vehicle Recently Exited</strong><br><span style="font-size:11px; font-weight: bold; color:#b45309;">⚠️ Transit Cooldown Active — Re-entry locked for ${exitCdRem}s</span>`;
+                statusBadgeEl.style.color = "#d97706";
             }
-            approveBtn.style.cursor = "pointer";
+            if (approveBtn) {
+                approveBtn.disabled = true;
+                approveBtn.innerHTML = `⏳ Re-entry Locked (${exitCdRem}s Cooldown)`;
+                approveBtn.style.background = "#94a3b8";
+                approveBtn.style.borderColor = "#94a3b8";
+                approveBtn.style.cursor = "not-allowed";
+            }
+        } else {
+            if (statusBadgeEl) {
+                if (data.is_registered) {
+                    statusBadgeEl.innerHTML = `🟢 <strong>Registered Vehicle</strong><br><span style="font-size:11px; font-weight: normal; color:#64748b;">Owner: ${data.owner_name || 'System Registry'}</span>`;
+                    statusBadgeEl.style.color = "#047857";
+                } else {
+                    statusBadgeEl.innerHTML = `⏳ <strong style="color: #d97706;">UNREGISTERED VEHICLE — PENDING AUTHORIZATION</strong><br><span style="font-size:11px; font-weight: 600; color:#64748b;">Barrier locked. Select Guest Pass or Deny Entry below:</span>`;
+                    statusBadgeEl.style.color = "#d97706";
+                }
+            }
+
+            if (approveBtn) {
+                approveBtn.disabled = false;
+                if (data.is_registered) {
+                    approveBtn.innerHTML = t.btn_confirm_grant_entrance || `🟢 Confirm & Grant Entrance`;
+                    approveBtn.style.background = "#10b981";
+                    approveBtn.style.borderColor = "#10b981";
+                } else {
+                    approveBtn.innerHTML = `🙋‍♂️ Authorize Guest Pass`;
+                    approveBtn.style.background = "#f59e0b";
+                    approveBtn.style.borderColor = "#d97706";
+                }
+                approveBtn.style.cursor = "pointer";
+            }
         }
 
         if (denyBtn) {
@@ -6030,6 +6669,9 @@ function closeDetectionConfirmModal() {
     const modal = document.getElementById("detectionConfirmModal");
     if (modal) modal.style.display = "none";
     activeVerificationData = null;
+    if (isAutoLiveScanEnabled && webcamStream && !isScanInProgress) {
+        scheduleNextAutoScan(300);
+    }
 }
 
 async function approveDetectionConfirmModal() {
@@ -6100,6 +6742,7 @@ async function approveDetectionConfirmModal() {
                             <label style="font-size: 11px; font-weight: 700; color: #78350f; display: block; margin-bottom: 4px;">Vehicle Category</label>
                             <select id="inlineGuestCategory" class="form-input" style="height: 36px; font-size: 12px; background: white; border-color: #fcd34d; font-weight: bold; color: var(--text-main);">
                                 <option value="Car">Car</option>
+                                <option value="Tuk Tuk">Tuk Tuk</option>
                                 <option value="Bike">Bike</option>
                                 <option value="Van">Van</option>
                                 <option value="Bus">Bus</option>
@@ -6135,23 +6778,559 @@ async function denyDetectionConfirmModal() {
     if (plate) {
         // Flag security alert for denied vehicle
         try {
+            const curToken = localStorage.getItem("token");
             const headers = { "Content-Type": "application/json" };
-            if (token) headers["Authorization"] = "Bearer " + token;
-            await fetch(API_URL + "/admin/alerts", {
+            if (curToken) headers["Authorization"] = "Bearer " + curToken;
+
+            const snap = activeVerificationData ? (activeVerificationData.snapshot || activeVerificationData.crop_snapshot) : null;
+
+            await fetch(API_URL + "/alerts", {
                 method: "POST",
                 headers: headers,
                 body: JSON.stringify({
                     plate_number: plate,
-                    reason: `Entrance DENIED by Security Operator during snapshot verification.`
+                    reason: `Entrance DENIED by Security Operator during snapshot verification. Barrier kept locked.`,
+                    snapshot: snap
                 })
             });
-            alert(`🛑 Entry Denied for plate ${plate}. Security alert logged.`);
+
+            alert(`🛑 Entry Denied for vehicle ${plate}. Security alert logged.`);
+            triggerSecuritySiren();
             if (typeof loadAlerts === "function") loadAlerts();
-            if (typeof loadSecurityAlerts === "function") loadSecurityAlerts();
+            if (typeof loadDashboardData === "function") loadDashboardData();
         } catch (err) {
             console.error("Error logging denied entry alert:", err);
         }
     }
 }
+
+
+// =============================================================================
+// SMART SINGLE-GATE ANPR CALIBRATION STUDIO & SIMULATOR ENGINE
+// =============================================================================
+
+let gateColliderConfig = {
+    pin_a: { x: 60, y: 140 },
+    pin_b: { x: 580, y: 140 },
+    pin_c: { x: 60, y: 340 },
+    pin_d: { x: 580, y: 340 },
+    gate_width_cm: 430,
+    driveway_depth_cm: 550
+};
+
+let activeGateDragPin = null;
+let gateCanvasBgImage = null;
+let gateSimulatorLogs = [];
+let isGateStudioInitialized = false;
+
+async function initGateCalibrationStudio() {
+    const canvas = document.getElementById("gateColliderCanvas");
+    if (!canvas) return;
+
+    // Load saved colliders from backend
+    try {
+        const curToken = token || localStorage.getItem("token");
+        const headers = curToken ? { "Authorization": "Bearer " + curToken } : {};
+        const res = await fetch(API_URL + "/entrance/gate-colliders", { headers });
+        if (res.ok) {
+            const data = await res.json();
+            if (data && data.pin_a) {
+                gateColliderConfig = data;
+            }
+        }
+    } catch (err) {
+        console.warn("Could not fetch remote gate colliders, using defaults/local:", err);
+        const cached = localStorage.getItem("gate_colliders_config");
+        if (cached) {
+            try { gateColliderConfig = JSON.parse(cached); } catch (e) {}
+        }
+    }
+
+    // Populate metric inputs
+    const widthInput = document.getElementById("gateWidthCmInput");
+    const depthInput = document.getElementById("gateDepthCmInput");
+    if (widthInput) widthInput.value = gateColliderConfig.gate_width_cm || 430;
+    if (depthInput) depthInput.value = gateColliderConfig.driveway_depth_cm || 550;
+
+    setupGateCanvasListeners();
+    renderGateColliderCanvas();
+    updateGateMetricDisplay();
+}
+
+function setupGateCanvasListeners() {
+    if (isGateStudioInitialized) return;
+    isGateStudioInitialized = true;
+
+    const canvas = document.getElementById("gateColliderCanvas");
+    if (!canvas) return;
+
+    function getCanvasPos(evt) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        let clientX = evt.clientX;
+        let clientY = evt.clientY;
+        if (evt.touches && evt.touches.length > 0) {
+            clientX = evt.touches[0].clientX;
+            clientY = evt.touches[0].clientY;
+        }
+        return {
+            x: (clientX - rect.left) * scaleX,
+            y: (clientY - rect.top) * scaleY
+        };
+    }
+
+    function findClosestPin(pos) {
+        const hitRadius = 25;
+        const pins = [
+            { key: "pin_a", x: gateColliderConfig.pin_a.x, y: gateColliderConfig.pin_a.y, color: "red" },
+            { key: "pin_b", x: gateColliderConfig.pin_b.x, y: gateColliderConfig.pin_b.y, color: "red" },
+            { key: "pin_c", x: gateColliderConfig.pin_c.x, y: gateColliderConfig.pin_c.y, color: "green" },
+            { key: "pin_d", x: gateColliderConfig.pin_d.x, y: gateColliderConfig.pin_d.y, color: "green" }
+        ];
+
+        for (const p of pins) {
+            const dist = Math.hypot(p.x - pos.x, p.y - pos.y);
+            if (dist <= hitRadius) return p.key;
+        }
+        return null;
+    }
+
+    function onStart(e) {
+        const pos = getCanvasPos(e);
+        const pinKey = findClosestPin(pos);
+        if (pinKey) {
+            activeGateDragPin = pinKey;
+            canvas.style.cursor = "grabbing";
+            e.preventDefault();
+        }
+    }
+
+    function onMove(e) {
+        const pos = getCanvasPos(e);
+        if (activeGateDragPin) {
+            // Clamp inside canvas bounds
+            gateColliderConfig[activeGateDragPin].x = Math.max(10, Math.min(canvas.width - 10, Math.round(pos.x)));
+            gateColliderConfig[activeGateDragPin].y = Math.max(10, Math.min(canvas.height - 10, Math.round(pos.y)));
+            renderGateColliderCanvas();
+            updateGateMetricDisplay();
+            e.preventDefault();
+        } else {
+            const hoverPin = findClosestPin(pos);
+            canvas.style.cursor = hoverPin ? "grab" : "crosshair";
+        }
+    }
+
+    function onEnd() {
+        if (activeGateDragPin) {
+            activeGateDragPin = null;
+            canvas.style.cursor = "crosshair";
+            renderGateColliderCanvas();
+        }
+    }
+
+    canvas.addEventListener("mousedown", onStart);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onEnd);
+
+    canvas.addEventListener("touchstart", onStart, { passive: false });
+    window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("touchend", onEnd);
+}
+
+function renderGateColliderCanvas() {
+    const canvas = document.getElementById("gateColliderCanvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const w = canvas.width;
+    const h = canvas.height;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Draw background camera snapshot if available, or simulated asphalt driveway
+    if (gateCanvasBgImage && gateCanvasBgImage.complete) {
+        ctx.drawImage(gateCanvasBgImage, 0, 0, w, h);
+        ctx.fillStyle = "rgba(10, 15, 30, 0.4)";
+        ctx.fillRect(0, 0, w, h);
+    } else {
+        // High-tech dark asphalt security grid
+        ctx.fillStyle = "#0c1222";
+        ctx.fillRect(0, 0, w, h);
+
+        // Grid lines with perspective feel
+        ctx.strokeStyle = "rgba(59, 130, 246, 0.08)";
+        ctx.lineWidth = 1;
+        for (let x = 0; x <= w; x += 40) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, h);
+            ctx.stroke();
+        }
+        for (let y = 0; y <= h; y += 40) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(w, y);
+            ctx.stroke();
+        }
+
+        // Center lane dashed line
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([12, 12]);
+        ctx.beginPath();
+        ctx.moveTo(w / 2, 0);
+        ctx.lineTo(w / 2, h);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    const { pin_a, pin_b, pin_c, pin_d } = gateColliderConfig;
+
+    // 1. Draw 🔴 RED LINE (Outer Gate / Public Road Boundary)
+    ctx.shadowColor = "#ef4444";
+    ctx.shadowBlur = 12;
+    ctx.strokeStyle = "#ef4444";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(pin_a.x, pin_a.y);
+    ctx.lineTo(pin_b.x, pin_b.y);
+    ctx.stroke();
+
+    // Red line label tag in middle
+    const redMidX = (pin_a.x + pin_b.x) / 2;
+    const redMidY = (pin_a.y + pin_b.y) / 2;
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(239, 68, 68, 0.9)";
+    ctx.font = "bold 11px system-ui, sans-serif";
+    const redText = `🔴 ROAD THRESHOLD (${gateColliderConfig.gate_width_cm || 430} cm)`;
+    const redWidth = ctx.measureText(redText).width + 16;
+    ctx.fillRect(redMidX - redWidth / 2, redMidY - 22, redWidth, 18);
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.fillText(redText, redMidX, redMidY - 9);
+
+    // 2. Draw 🟢 GREEN LINE (Inner Premises / Driveway Line)
+    ctx.shadowColor = "#10b981";
+    ctx.shadowBlur = 12;
+    ctx.strokeStyle = "#10b981";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(pin_c.x, pin_c.y);
+    ctx.lineTo(pin_d.x, pin_d.y);
+    ctx.stroke();
+
+    // Green line label tag in middle
+    const greenMidX = (pin_c.x + pin_d.x) / 2;
+    const greenMidY = (pin_c.y + pin_d.y) / 2;
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(16, 185, 129, 0.9)";
+    ctx.font = "bold 11px system-ui, sans-serif";
+    const greenText = `🟢 INNER DRIVEWAY (${gateColliderConfig.driveway_depth_cm || 550} cm depth)`;
+    const greenWidth = ctx.measureText(greenText).width + 16;
+    ctx.fillRect(greenMidX - greenWidth / 2, greenMidY + 6, greenWidth, 18);
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.fillText(greenText, greenMidX, greenMidY + 19);
+
+    // 3. Draw Anchor Pins Handles
+    drawGatePin(ctx, pin_a.x, pin_a.y, "A", "#ef4444", activeGateDragPin === "pin_a");
+    drawGatePin(ctx, pin_b.x, pin_b.y, "B", "#ef4444", activeGateDragPin === "pin_b");
+    drawGatePin(ctx, pin_c.x, pin_c.y, "C", "#10b981", activeGateDragPin === "pin_c");
+    drawGatePin(ctx, pin_d.x, pin_d.y, "D", "#10b981", activeGateDragPin === "pin_d");
+}
+
+function drawGatePin(ctx, x, y, label, color, isActive) {
+    ctx.save();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = isActive ? 16 : 8;
+
+    // Outer glow ring
+    ctx.beginPath();
+    ctx.arc(x, y, isActive ? 16 : 13, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    // Inner white disc
+    ctx.beginPath();
+    ctx.arc(x, y, isActive ? 12 : 9, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+
+    // Text label inside
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = color;
+    ctx.font = "bold 11px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, x, y);
+
+    ctx.restore();
+}
+
+function updateGateMetricDisplay() {
+    const widthInput = document.getElementById("gateWidthCmInput");
+    const depthInput = document.getElementById("gateDepthCmInput");
+    if (widthInput) gateColliderConfig.gate_width_cm = parseFloat(widthInput.value) || 430;
+    if (depthInput) gateColliderConfig.driveway_depth_cm = parseFloat(depthInput.value) || 550;
+
+    const overlay = document.getElementById("gateCoordsOverlay");
+    if (overlay) {
+        const { pin_a, pin_b, pin_c, pin_d } = gateColliderConfig;
+        overlay.textContent = `Red: [A: ${Math.round(pin_a.x)},${Math.round(pin_a.y)} → B: ${Math.round(pin_b.x)},${Math.round(pin_b.y)}] | Green: [C: ${Math.round(pin_c.x)},${Math.round(pin_c.y)} → D: ${Math.round(pin_d.x)},${Math.round(pin_d.y)}]`;
+    }
+}
+
+async function saveGateColliders() {
+    updateGateMetricDisplay();
+    try {
+        const curToken = token || localStorage.getItem("token");
+        const headers = { "Content-Type": "application/json" };
+        if (curToken) headers["Authorization"] = "Bearer " + curToken;
+
+        const res = await fetch(API_URL + "/entrance/gate-colliders", {
+            method: "POST",
+            headers,
+            body: JSON.stringify(gateColliderConfig)
+        });
+
+        if (!res.ok) throw new Error("Failed to save colliders to server");
+        const json = await res.json();
+        localStorage.setItem("gate_colliders_config", JSON.stringify(gateColliderConfig));
+
+        alert(" Gate Colliders & Metric Measurements successfully saved!");
+        renderGateColliderCanvas();
+    } catch (err) {
+        console.error("Error saving gate colliders:", err);
+        localStorage.setItem("gate_colliders_config", JSON.stringify(gateColliderConfig));
+        alert("Gate Colliders saved locally!");
+    }
+}
+
+function resetGateColliders() {
+    gateColliderConfig = {
+        pin_a: { x: 60, y: 140 },
+        pin_b: { x: 580, y: 140 },
+        pin_c: { x: 60, y: 340 },
+        pin_d: { x: 580, y: 340 },
+        gate_width_cm: 430,
+        driveway_depth_cm: 550
+    };
+    const widthInput = document.getElementById("gateWidthCmInput");
+    const depthInput = document.getElementById("gateDepthCmInput");
+    if (widthInput) widthInput.value = 430;
+    if (depthInput) depthInput.value = 550;
+
+    renderGateColliderCanvas();
+    updateGateMetricDisplay();
+}
+
+function loadLiveCameraToGateCanvas() {
+    const video = document.getElementById("webcamFeed");
+    if (video && video.videoWidth > 0) {
+        const offscreen = document.createElement("canvas");
+        offscreen.width = 640;
+        offscreen.height = 380;
+        const ctx = offscreen.getContext("2d");
+        ctx.drawImage(video, 0, 0, 640, 380);
+
+        const img = new Image();
+        img.onload = () => {
+            gateCanvasBgImage = img;
+            renderGateColliderCanvas();
+        };
+        img.src = offscreen.toDataURL("image/jpeg", 0.8);
+    } else {
+        alert("Live camera feed is currently off. Start the camera in the 'Live Capture' tab first, then click this button to capture a reference background frame.");
+    }
+}
+
+// =============================================================================
+// LIVE TRIGGER SIMULATOR ENGINE (GREEN / RED / PASSING TRAFFIC)
+// =============================================================================
+
+async function simulateGateTrigger(lineType) {
+    const plateInput = document.getElementById("simGatePlateInput");
+    const categorySelect = document.getElementById("simGateCategorySelect");
+    const plate = (plateInput ? plateInput.value : "WP-CAB-1234").trim().toUpperCase();
+    const category = categorySelect ? categorySelect.value : "Car";
+
+    if (!plate) {
+        alert("Please enter a valid license plate number to simulate.");
+        return;
+    }
+
+    try {
+        const curToken = token || localStorage.getItem("token");
+        const headers = { "Content-Type": "application/json" };
+        if (curToken) headers["Authorization"] = "Bearer " + curToken;
+
+        const res = await fetch(API_URL + "/entrance/gate-trigger", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+                plate_number: plate,
+                line_trigger: lineType,
+                category: category
+            })
+        });
+
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.detail || "Gate simulation request failed");
+        }
+
+        const data = await res.json();
+        renderGateSimulationResult(lineType, plate, data);
+
+        // Reload dashboard live counts & parking slots if open
+        if (typeof loadDashboardData === "function") loadDashboardData();
+        if (typeof loadAdminParkingSlots === "function") loadAdminParkingSlots();
+
+    } catch (err) {
+        console.error("Simulation error:", err);
+        alert("Simulation failed: " + err.message);
+    }
+}
+
+function renderGateSimulationResult(lineType, plate, data) {
+    const container = document.getElementById("simGateResultContainer");
+    const badge = document.getElementById("simResultBadge");
+    const plateEl = document.getElementById("simResultPlate");
+    const bayEl = document.getElementById("simResultBay");
+    const msgEl = document.getElementById("simResultMessage");
+    const timeEl = document.getElementById("simResultTime");
+
+    if (!container) return;
+    container.style.display = "block";
+
+    const isGreen = lineType === "GREEN";
+    const isIgnored = data.is_ignored || data.action === "IGNORED";
+    const isDeparture = data.is_departure;
+
+    plateEl.textContent = plate;
+    msgEl.textContent = data.message || "Decision processed.";
+    timeEl.textContent = new Date().toLocaleTimeString();
+
+    if (isIgnored) {
+        // SITUATION 3: Passing Public Street Traffic Filtered
+        container.style.background = "#f8fafc";
+        container.style.border = "1.5px solid #94a3b8";
+        badge.style.background = "#64748b";
+        badge.style.color = "#ffffff";
+        badge.textContent = "🛡️ IGNORED (STREET TRAFFIC)";
+        bayEl.style.display = "none";
+    } else if (isDeparture) {
+        // SITUATION 2: Legitimate Departure Exiting
+        container.style.background = "#fef2f2";
+        container.style.border = "1.5px solid #f87171";
+        badge.style.background = "#dc2626";
+        badge.style.color = "#ffffff";
+        badge.textContent = "🔴 EXIT AUTHORIZED";
+        bayEl.style.display = "inline-block";
+        bayEl.textContent = `Freed Bay: ${data.slot_name || "N/A"}`;
+    } else {
+        // SITUATION 1: Legitimate Arriving Entry
+        container.style.background = "#f0fdf4";
+        container.style.border = "1.5px solid #4ade80";
+        badge.style.background = "#16a34a";
+        badge.style.color = "#ffffff";
+        badge.textContent = data.is_guest ? "🟢 GUEST GRANTED" : "🟢 ENTRY GRANTED";
+        bayEl.style.display = "inline-block";
+        bayEl.textContent = `Assigned Bay: ${data.slot_name || "Available"}`;
+    }
+
+    // Append to Simulation Event Log Table
+    addGateSimulationLogEntry(lineType, plate, data);
+}
+
+function addGateSimulationLogEntry(lineType, plate, data) {
+    const tbody = document.getElementById("simGateEventsTableBody");
+    if (!tbody) return;
+
+    // Remove empty placeholder if present
+    if (gateSimulatorLogs.length === 0) {
+        tbody.innerHTML = "";
+    }
+
+    const logEntry = {
+        time: new Date().toLocaleTimeString(),
+        lineType,
+        plate,
+        data
+    };
+    gateSimulatorLogs.unshift(logEntry);
+    if (gateSimulatorLogs.length > 10) gateSimulatorLogs.pop();
+
+    const isIgnored = data.is_ignored || data.action === "IGNORED";
+    const isDeparture = data.is_departure;
+
+    let lineBadge = lineType === "GREEN"
+        ? `<span style="color: #16a34a; font-weight: 800;">🟢 Green Line (Driveway)</span>`
+        : `<span style="color: #dc2626; font-weight: 800;">🔴 Red Line (Outer Gate)</span>`;
+
+    let actionText = "";
+    let outcomeBadge = "";
+
+    if (isIgnored) {
+        actionText = "Passing Public Road Traffic";
+        outcomeBadge = `<span style="font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 6px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;">🛡️ Ignored (0 records)</span>`;
+    } else if (isDeparture) {
+        actionText = "Vehicle Departing Premises";
+        outcomeBadge = `<span style="font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 6px; background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5;">🔴 Exit Authorized</span>`;
+    } else {
+        actionText = "Vehicle Arriving / Entering";
+        outcomeBadge = `<span style="font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 6px; background: #dcfce7; color: #16a34a; border: 1px solid #86efac;">🟢 Gate Opened</span>`;
+    }
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+        <td style="font-family: monospace; font-size: 12px; color: #64748b;">${logEntry.time}</td>
+        <td>${lineBadge}</td>
+        <td style="font-weight: 800; color: #0f172a; letter-spacing: 0.5px;">${plate}</td>
+        <td style="font-size: 12px; color: #334155;">${actionText}</td>
+        <td style="font-weight: 700; color: #2563eb;">${data.slot_name || "—"}</td>
+        <td>${outcomeBadge}</td>
+    `;
+
+    tbody.insertBefore(tr, tbody.firstChild);
+}
+
+// Live Video Feed Overlay Drawer for detectionOverlayCanvas
+function renderGateLinesOnLiveStream(canvas, video) {
+    if (!canvas || !video || video.videoWidth === 0) return;
+    const ctx = canvas.getContext("2d");
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    canvas.width = vw;
+    canvas.height = vh;
+
+    // Scale from 640x380 studio canvas to video resolution
+    const scaleX = vw / 640;
+    const scaleY = vh / 380;
+    const { pin_a, pin_b, pin_c, pin_d } = gateColliderConfig;
+
+    // Draw Red Line
+    ctx.save();
+    ctx.shadowColor = "#ef4444";
+    ctx.shadowBlur = 10;
+    ctx.strokeStyle = "rgba(239, 68, 68, 0.9)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(pin_a.x * scaleX, pin_a.y * scaleY);
+    ctx.lineTo(pin_b.x * scaleX, pin_b.y * scaleY);
+    ctx.stroke();
+
+    // Draw Green Line
+    ctx.shadowColor = "#10b981";
+    ctx.shadowBlur = 10;
+    ctx.strokeStyle = "rgba(16, 185, 129, 0.9)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(pin_c.x * scaleX, pin_c.y * scaleY);
+    ctx.lineTo(pin_d.x * scaleX, pin_d.y * scaleY);
+    ctx.stroke();
+    ctx.restore();
+}
+
 
 

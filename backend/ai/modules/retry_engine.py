@@ -63,19 +63,24 @@ class RetryEngine:
 
     def upscale_plate(self, image):
         """
-        Enlarge small perspective-corrected plates before OCR.
-        Avoids redundant upscaling when plate width is already sufficient.
+        Enlarge small perspective-corrected plates before OCR using Lanczos4 interpolation.
+        Ensures character line height is at least 32-48px for clear stroke separation.
         """
         if image is None or image.size == 0:
             return None, 1.0
 
         height, width = image.shape[:2]
+        aspect = width / max(1, height)
+        is_two_line = aspect < 2.0
+        line_h = height / 2.0 if is_two_line else float(height)
 
-        if width < 100:
+        if width < 100 or line_h < 20:
+            scale = 3.5
+        elif width < 150 or line_h < 28:
             scale = 2.5
-        elif width < 160:
+        elif width < 220 or line_h < 36:
             scale = 1.8
-        elif width < 220:
+        elif width < 300:
             scale = 1.3
         else:
             scale = 1.0
@@ -83,13 +88,15 @@ class RetryEngine:
         if scale == 1.0:
             return image, 1.0
 
-        new_width = max(1, int(width * scale))
-        new_height = max(1, int(height * scale))
+        new_width = max(1, int(round(width * scale)))
+        new_height = max(1, int(round(height * scale)))
+
+        interp = cv2.INTER_LANCZOS4 if scale >= 1.8 else cv2.INTER_CUBIC
 
         enlarged = cv2.resize(
             image,
             (new_width, new_height),
-            interpolation=cv2.INTER_CUBIC
+            interpolation=interp
         )
 
         return enlarged, scale
@@ -98,16 +105,20 @@ class RetryEngine:
     # OCR ATTEMPT
     # =====================================================
 
-    def run_ocr_attempt(self, image, attempt_name):
+    def run_ocr_attempt(self, image, attempt_name, mode="clean"):
         """
-        Run quality analysis → preprocessing → OCR → validation.
+        Run OCR pass and validation with specialized preprocessing hypothesis:
+        - mode="clean": Raw upscale
+        - mode="clahe": CLAHE local contrast enhancement
+        - mode="sharpen": Edge sharpening to separate merged character strokes
+        - mode="unsharp_mask": Unsharp mask filtering
         """
-
         if image is None or image.size == 0:
             return {
                 "text": "",
                 "confidence": 0.0,
                 "valid": False,
+                "status": "INVALID",
                 "validated_text": "",
                 "plate_type": "Unknown",
                 "attempt": attempt_name,
@@ -118,116 +129,82 @@ class RetryEngine:
             }
 
         # -------------------------------------------------
-        # QUALITY
+        # PREPROCESS HYPOTHESIS
         # -------------------------------------------------
-
-        quality = self.quality_analyzer.analyze(image)
-
-        # -------------------------------------------------
-        # PREPROCESS
-        # -------------------------------------------------
-
         preprocess_start = time.perf_counter()
+        if mode == "clahe":
+            processed = self.preprocessor.clahe(image)
+        elif mode == "sharpen":
+            kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
+            processed = cv2.filter2D(image, -1, kernel)
+        elif mode == "unsharp_mask":
+            gaussian = cv2.GaussianBlur(image, (0, 0), 2.0)
+            processed = cv2.addWeighted(image, 1.5, gaussian, -0.5, 0)
+        else:
+            processed = image
 
-        processed = self.preprocessor.process(
-            image,
-            quality
-        )
-
-        preprocess_time = (
-            time.perf_counter() - preprocess_start
-        ) * 1000
+        preprocess_time = (time.perf_counter() - preprocess_start) * 1000
 
         # -------------------------------------------------
         # OCR
         # -------------------------------------------------
-
         ocr = self.ocr.read(processed)
-
         text = ocr.get("text", "")
-        confidence = float(
-            ocr.get("confidence", 0.0)
-        )
+        confidence = float(ocr.get("confidence", 0.0))
+        top_cand = ocr.get("top_candidate", "")
+        bot_cand = ocr.get("bot_candidate", "")
 
         # -------------------------------------------------
-        # VALIDATION & NORMALIZATION
+        # VALIDATION & CANDIDATE NORMALIZATION
         # -------------------------------------------------
-
         validation = self.validator.validate(text)
-
-        # Automatic 2-Line / Square Plate De-stacker (e.g. WP CBE on top, 3319 on bottom)
-        if not validation.get("valid", False) and image.shape[0] >= 30:
-            h, w = image.shape[:2]
-            aspect = w / max(1, h)
-            if aspect <= 2.8:
-                top_part = image[:int(h * 0.58), :]
-                bottom_part = image[int(h * 0.42):, :]
-                
-                target_h = 48
-                tw = max(10, int(top_part.shape[1] * (target_h / max(1, top_part.shape[0]))))
-                bw = max(10, int(bottom_part.shape[1] * (target_h / max(1, bottom_part.shape[0]))))
-                
-                t_resized = cv2.resize(top_part, (tw, target_h), interpolation=cv2.INTER_LINEAR)
-                b_resized = cv2.resize(bottom_part, (bw, target_h), interpolation=cv2.INTER_LINEAR)
-                stitched = np.hstack([t_resized, b_resized])
-                
-                stitched_processed = self.preprocessor.process(stitched, quality)
-                stitched_ocr = self.ocr.read(stitched_processed)
-                stitched_text = stitched_ocr.get("text", "")
-                stitched_val = self.validator.validate(stitched_text)
-                
-                if stitched_val.get("valid", False):
-                    text = stitched_text
-                    confidence = float(stitched_ocr.get("confidence", confidence))
-                    validation = stitched_val
-                    processed = stitched
+        if not validation.get("valid") and top_cand and bot_cand:
+            from .validator import parse_two_line_plate
+            two_line_res = parse_two_line_plate(top_cand, bot_cand)
+            if two_line_res and two_line_res.get("valid"):
+                validation = two_line_res
 
         norm_plate = validation.get("normalized_plate", validation.get("text", text))
         plate_cat = validation.get("plate_category", validation.get("type", "Unknown"))
+        status = validation.get("status", "VALID" if validation.get("valid") else "INVALID")
 
         return {
             "text": text,
             "raw_plate": text,
+            "top_candidate": top_cand,
+            "bot_candidate": bot_cand,
             "normalized_plate": norm_plate,
             "plate_category": plate_cat,
             "confidence": confidence,
             "valid": bool(validation.get("valid", False)),
+            "status": status,
             "validated_text": norm_plate,
             "plate_type": plate_cat,
             "attempt": attempt_name,
-            "quality": quality,
+            "quality": None,
             "processed": processed,
-            "ocr_time_ms": float(
-                ocr.get("time_ms", 0.0)
-            ),
+            "ocr_time_ms": float(ocr.get("time_ms", 0.0)),
             "preprocess_time_ms": preprocess_time,
         }
 
     # =====================================================
-    # RETRY PIPELINE
+    # RETRY PIPELINE (MULTI-HYPOTHESIS PREPROCESSING ENSEMBLE)
     # =====================================================
 
     def recognize(self, rectified):
         """
-        Complete OCR + retry process.
-
-        Attempt 0:
-            Original perspective plate + adaptive upscale
-
-        Retry 1:
-            Gamma / CLAHE / sharpening based on quality
-
-        Retry 2:
-            Stronger enhancement
-
-        Returns the best result.
+        Multi-Hypothesis Preprocessing Ensemble + Strict Validation:
+        Variant 1: Raw perspective crop + high-ratio Lanczos4 upscale
+        Variant 2: Light CLAHE contrast
+        Variant 3: Stroke Sharpening (separates fused character strokes)
+        Variant 4: Unsharp Masking
         """
-
         if rectified is None or rectified.size == 0:
             return {
                 "text": "",
                 "confidence": 0.0,
                 "valid": False,
+                "status": "INVALID",
                 "validated_text": "",
                 "plate_type": "Unknown",
                 "attempt": "none",
@@ -238,206 +215,91 @@ class RetryEngine:
 
         total_start = time.perf_counter()
 
-        # =================================================
-        # ADAPTIVE UPSCALE
-        # =================================================
-
-        enlarged, scale = self.upscale_plate(
-            rectified
-        )
-
-        print(
-            f"\nAdaptive upscale: "
-            f"{scale:.1f}x"
-        )
-
-        print(
-            f"Perspective plate: "
-            f"{rectified.shape[1]} x "
-            f"{rectified.shape[0]}"
-        )
-
-        print(
-            f"Enlarged plate: "
-            f"{enlarged.shape[1]} x "
-            f"{enlarged.shape[0]}"
-        )
-
+        # Adaptive upscale for small crops
+        enlarged, scale = self.upscale_plate(rectified)
         attempts = []
 
-        # =================================================
-        # ATTEMPT 0
-        # =================================================
+        # -------------------------------------------------
+        # VARIANT 1: Clean High-Ratio Scaled Crop
+        # -------------------------------------------------
+        print(f"\nAdaptive upscale: {scale:.1f}x ({rectified.shape[1]}x{rectified.shape[0]} -> {enlarged.shape[1]}x{enlarged.shape[0]})")
+        print("OCR Attempt 1 (Clean Crop)")
 
-        print("\nOCR Attempt 1/3")
-
-        result = self.run_ocr_attempt(
-            enlarged,
-            "initial"
-        )
-
+        result = self.run_ocr_attempt(enlarged, "clean_raw", mode="clean")
         attempts.append(result)
 
-        print(
-            f"Text       : "
-            f"{result['text']}"
-        )
+        print(f"Text       : {result['text']}")
+        print(f"Confidence : {result['confidence']:.4f}")
+        print(f"Status     : {result.get('status', 'INVALID')} (Valid={result['valid']})")
 
-        print(
-            f"Confidence : "
-            f"{result['confidence']:.4f}"
-        )
-
-        print(
-            f"Valid      : "
-            f"{result['valid']}"
-        )
-
-        # =================================================
-        # SUCCESS
-        # =================================================
-
-        if result["valid"]:
+        # If valid and high confidence, return immediately
+        if result["valid"] and result["confidence"] >= 0.85:
             result["attempts"] = attempts
             result["upscale"] = scale
-
-            result["total_ocr_time_ms"] = (
-                time.perf_counter()
-                - total_start
-            ) * 1000
-
-            print(
-                "\nSUCCESS on first OCR attempt."
-            )
-
+            result["total_ocr_time_ms"] = (time.perf_counter() - total_start) * 1000
+            print("SUCCESS on first OCR attempt.")
             return result
 
-        # =================================================
-        # RETRIES
-        # =================================================
-
-        retry_images = []
-
         # -------------------------------------------------
-        # RETRY 1
+        # VARIANT 2: CLAHE Contrast Normalization
         # -------------------------------------------------
-
         if self.max_retries >= 1:
+            print("\nOCR Attempt 2 (Light CLAHE Contrast)")
+            clahe_result = self.run_ocr_attempt(enlarged, "light_clahe", mode="clahe")
+            attempts.append(clahe_result)
 
-            retry1 = enlarged.copy()
+            print(f"Text       : {clahe_result['text']}")
+            print(f"Confidence : {clahe_result['confidence']:.4f}")
+            print(f"Status     : {clahe_result.get('status', 'INVALID')} (Valid={clahe_result['valid']})")
 
-            # Mild sharpening
-            retry1 = self.preprocessor.sharpen(
-                retry1
-            )
-
-            retry_images.append(
-                ("retry_1_sharpen", retry1)
-            )
+            if clahe_result["valid"] and clahe_result["confidence"] >= 0.85:
+                clahe_result["attempts"] = attempts
+                clahe_result["upscale"] = scale
+                clahe_result["total_ocr_time_ms"] = (time.perf_counter() - total_start) * 1000
+                print("SUCCESS on CLAHE retry.")
+                return clahe_result
 
         # -------------------------------------------------
-        # RETRY 2
+        # VARIANT 3: Stroke Sharpening (Separates Fused Digits)
         # -------------------------------------------------
+        if self.max_retries >= 2 or not any(a["valid"] for a in attempts):
+            print("\nOCR Attempt 3 (Stroke Sharpening)")
+            sharp_result = self.run_ocr_attempt(enlarged, "stroke_sharpen", mode="sharpen")
+            attempts.append(sharp_result)
 
-        if self.max_retries >= 2:
+            print(f"Text       : {sharp_result['text']}")
+            print(f"Confidence : {sharp_result['confidence']:.4f}")
+            print(f"Status     : {sharp_result.get('status', 'INVALID')} (Valid={sharp_result['valid']})")
 
-            retry2 = enlarged.copy()
+            if sharp_result["valid"] and sharp_result["confidence"] >= 0.85:
+                sharp_result["attempts"] = attempts
+                sharp_result["upscale"] = scale
+                sharp_result["total_ocr_time_ms"] = (time.perf_counter() - total_start) * 1000
+                print("SUCCESS on Sharpening retry.")
+                return sharp_result
 
-            # CLAHE
-            retry2 = self.preprocessor.clahe(
-                retry2
-            )
+        # -------------------------------------------------
+        # VARIANT 4: Unsharp Masking
+        # -------------------------------------------------
+        if not any(a["valid"] for a in attempts):
+            print("\nOCR Attempt 4 (Unsharp Mask)")
+            unsharp_result = self.run_ocr_attempt(enlarged, "unsharp_mask", mode="unsharp_mask")
+            attempts.append(unsharp_result)
 
-            # Sharpen after CLAHE
-            retry2 = self.preprocessor.sharpen(
-                retry2
-            )
+            print(f"Text       : {unsharp_result['text']}")
+            print(f"Confidence : {unsharp_result['confidence']:.4f}")
+            print(f"Status     : {unsharp_result.get('status', 'INVALID')} (Valid={unsharp_result['valid']})")
 
-            retry_images.append(
-                ("retry_2_clahe_sharpen", retry2)
-            )
-
-        # =================================================
-        # EXECUTE RETRIES
-        # =================================================
-
-        for retry_number, (
-            retry_name,
-            retry_image
-        ) in enumerate(
-            retry_images,
-            start=1
-        ):
-
-            print(
-                f"\nOCR Attempt "
-                f"{retry_number + 1}/"
-                f"{self.max_retries + 1}"
-            )
-
-            result = self.run_ocr_attempt(
-                retry_image,
-                retry_name
-            )
-
-            attempts.append(result)
-
-            print(
-                f"Text       : "
-                f"{result['text']}"
-            )
-
-            print(
-                f"Confidence : "
-                f"{result['confidence']:.4f}"
-            )
-
-            print(
-                f"Valid      : "
-                f"{result['valid']}"
-            )
-
-            # -------------------------------------------------
-            # VALID RESULT → STOP IMMEDIATELY
-            # -------------------------------------------------
-
-            if result["valid"]:
-
-                result["attempts"] = attempts
-                result["upscale"] = scale
-
-                result["total_ocr_time_ms"] = (
-                    time.perf_counter()
-                    - total_start
-                ) * 1000
-
-                print(
-                    f"\nSUCCESS on "
-                    f"{retry_name}."
-                )
-
-                return result
-
-        # =================================================
-        # NO VALID RESULT
-        # =================================================
-
-        print(
-            "\nNo valid plate after retries."
-        )
-
-        # Choose highest-confidence attempt
+        # Select the best candidate across all hypotheses (preferring VALID candidates with highest confidence)
         best = max(
             attempts,
-            key=lambda x: x["confidence"]
+            key=lambda x: (
+                x["valid"],
+                x.get("status") in ["VALID", "PENDING_OCR"],
+                x["confidence"]
+            )
         )
-
         best["attempts"] = attempts
         best["upscale"] = scale
-
-        best["total_ocr_time_ms"] = (
-            time.perf_counter()
-            - total_start
-        ) * 1000
-
+        best["total_ocr_time_ms"] = (time.perf_counter() - total_start) * 1000
         return best

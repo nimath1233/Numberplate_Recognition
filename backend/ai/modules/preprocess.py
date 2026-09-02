@@ -50,101 +50,48 @@ class PlatePreprocessor:
 
         return cv2.LUT(image, table)
 
-    # ---------------------------------------------------------
-    # CLAHE
-    # ---------------------------------------------------------
-
     def clahe(self, image):
-
+        """Mild CLAHE for low-contrast images."""
+        if image is None or image.size == 0:
+            return image
         gray = cv2.cvtColor(
             image,
             cv2.COLOR_BGR2GRAY
         )
-
         clahe = cv2.createCLAHE(
-            clipLimit=2.0,
+            clipLimit=1.5,
             tileGridSize=(8, 8)
         )
-
         gray = clahe.apply(gray)
-
         return cv2.cvtColor(
             gray,
             cv2.COLOR_GRAY2BGR
         )
 
-    # ---------------------------------------------------------
-    # Sharpen
-    # ---------------------------------------------------------
-
     def sharpen(self, image):
+        """Subtle unsharp masking instead of harsh high-pass filter."""
+        if image is None or image.size == 0:
+            return image
+        blurred = cv2.GaussianBlur(image, (0, 0), 1.0)
+        return cv2.addWeighted(image, 1.2, blurred, -0.2, 0)
 
-        kernel = np.array([
-            [0, -1, 0],
-            [-1, 5, -1],
-            [0, -1, 0]
-        ])
+    def process(self, image, quality=None):
+        """
+        Gentle preprocessing pass. Only enhances if quality metrics indicate severe deficiency.
+        """
+        if image is None or image.size == 0:
+            return image
 
-        return cv2.filter2D(
-            image,
-            -1,
-            kernel
-        )
+        # Keep original image clean by default
+        if quality is None:
+            return image
 
-    # ---------------------------------------------------------
-    # Highlight Reduction
-    # ---------------------------------------------------------
-
-    def highlight(self, image):
-
-        hsv = cv2.cvtColor(
-            image,
-            cv2.COLOR_BGR2HSV
-        )
-
-        h, s, v = cv2.split(hsv)
-
-        v = np.clip(v * 0.85, 0, 255).astype(np.uint8)
-
-        hsv = cv2.merge((h, s, v))
-
-        return cv2.cvtColor(
-            hsv,
-            cv2.COLOR_HSV2BGR
-        )
-
-    # ---------------------------------------------------------
-    # Execute Recommended Pipeline
-    # ---------------------------------------------------------
-
-    def process(self, image, quality):
-
+        pipeline = quality.get("recommended_pipeline", [])
         processed = image.copy()
 
-        print("\nRecommended Pipeline")
-
-        print(quality["recommended_pipeline"])
-
-        for step in quality["recommended_pipeline"]:
-
-            if step == "resize":
-
-                processed = self.resize(processed)
-
-            elif step == "gamma":
-
-                processed = self.gamma(processed)
-
-            elif step == "clahe":
-
-                processed = self.clahe(processed)
-
-            elif step == "sharpen":
-
-                processed = self.sharpen(processed)
-
-            elif step == "highlight":
-
-                processed = self.highlight(processed)
+        if "clahe" in pipeline:
+            processed = self.clahe(processed)
+        elif "gamma" in pipeline:
+            processed = self.gamma(processed)
 
         return processed

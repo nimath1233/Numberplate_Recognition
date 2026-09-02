@@ -205,12 +205,15 @@ class PerspectiveTransformer:
         )
 
         # ---------------------------------------------
-        # Expand Rectangle
+        # Expand Rectangle (Only expand single-line plates; keep square plates tight)
         # ---------------------------------------------
+        rw, rh = GeometryUtils.rectangle_size(rect)
+        aspect = rw / max(1, rh)
+        exp_scale = 1.05 if aspect >= 2.0 else 1.00
 
         rect = GeometryUtils.expand_rectangle(
             rect,
-            scale=1.05
+            scale=exp_scale
         )
 
         # ---------------------------------------------

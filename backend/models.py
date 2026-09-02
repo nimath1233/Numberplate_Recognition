@@ -63,6 +63,11 @@ class TruckCategory(BaseVehicleCategory):
     glb_model = "truck.glb"
     icon = "🚚"
 
+class TukTukCategory(BaseVehicleCategory):
+    name = "Tuk Tuk"
+    glb_model = "tuktuk.glb"
+    icon = "🛺"
+
 class VehicleCategoryFactory:
     _registry = {
         "car": CarCategory,
@@ -70,6 +75,11 @@ class VehicleCategoryFactory:
         "van": VanCategory,
         "bus": BusCategory,
         "truck": TruckCategory,
+        "tuktuk": TukTukCategory,
+        "tuk tuk": TukTukCategory,
+        "three wheeler": TukTukCategory,
+        "three-wheeler": TukTukCategory,
+        "auto": TukTukCategory,
     }
 
     @classmethod

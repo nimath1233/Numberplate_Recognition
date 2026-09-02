@@ -173,6 +173,30 @@ const adminAPI = {
         });
         if (!res.ok) throw new Error(await res.text());
         return await res.json();
+    },
+
+    async getAIEngineStatus() {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${API_URL}/admin/ai-engine/status`, {
+            headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error(await res.text());
+        return await res.json();
+    },
+
+    async updateAIEngineConfig(configPayload) {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${API_URL}/admin/ai-engine/config`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify(configPayload)
+        });
+        if (!res.ok) throw new Error(await res.text());
+        return await res.json();
     }
 };
+
 

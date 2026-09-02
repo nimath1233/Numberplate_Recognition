@@ -32,9 +32,13 @@ UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 COOLDOWN_SECONDS = int(os.environ.get("ANPR_COOLDOWN_SECONDS", "120"))
 recent_scans_cache: dict[str, float] = {}
 
-def is_plate_in_cooldown(plate: str) -> tuple[bool, int]:
+def is_plate_in_cooldown(plate: str, update_cache: bool = True) -> tuple[bool, int]:
     """
     Check if the same plate number was scanned and logged within the cooldown period (120s).
+    Args:
+        plate: Raw or normalized plate string
+        update_cache: If True, registers/updates the timestamp in cooldown cache.
+                      If False, only inspects cooldown status without locking.
     Returns: (is_duplicate: bool, remaining_seconds: int)
     """
     if not plate:
@@ -49,8 +53,9 @@ def is_plate_in_cooldown(plate: str) -> tuple[bool, int]:
         remaining = int(COOLDOWN_SECONDS - (now - last_time))
         return True, remaining
 
-    # Register/Update this plate timestamp
-    recent_scans_cache[clean] = now
+    if update_cache:
+        # Register/Update this plate timestamp only when confirmed
+        recent_scans_cache[clean] = now
 
     # Housekeeping: prune old entries
     if len(recent_scans_cache) > 300:
@@ -117,9 +122,11 @@ def upload_image(
     file: UploadFile = File(...),
     process_ai: bool = Query(True, description="Whether to run automatic ANPR detection on uploaded image"),
     verification_mode: str = Query("smart", description="Verification mode: smart, strict, or auto"),
+    gate_line: str | None = Query(None, description="Trigger line: 'GREEN' (Driveway) or 'RED' (Outer Gate)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+
     """
     Upload an image frame/photo and optionally run end-to-end ANPR detection,
     plate normalization, verification, and parking assignment.
@@ -184,6 +191,12 @@ def upload_image(
         conf = float(best_det.get("ocr_confidence", 0.0))
         valid = bool(best_det.get("valid", False))
         bbox = [int(b) for b in best_det.get("bbox", ())] if best_det.get("bbox") else None
+        track_id = int(best_det.get("track_id", 1))
+        track_history = best_det.get("track_history", [])
+        vehicle_bbox = best_det.get("vehicle_bbox")
+        vehicle_type = best_det.get("vehicle_category", "Car")
+
+
 
         # Save rectified plate crop if available
         crop_filename = None
@@ -197,22 +210,36 @@ def upload_image(
         vehicle, is_registered, resolved_plate = match_registered_vehicle(db, norm_plate or raw_plate)
         if resolved_plate:
             effective_plate = resolved_plate
-        else:
-            effective_plate = norm_plate if norm_plate else (raw_plate if raw_plate else "UNKNOWN")
+        # Check if plate has an active Security Alert (Flagged / Denied / Blacklisted)
+        active_alert = db.query(Alert).filter(
+            func.upper(Alert.plate_number) == func.upper(effective_plate)
+        ).order_by(Alert.alert_time.desc()).first()
 
-        status = "Allowed" if is_registered else "Flagged"
+        if active_alert:
+            status = "Flagged"
+            parking_message = f"SECURITY ALERT ACTIVE: Vehicle '{effective_plate}' is flagged. Barrier kept LOCKED."
+        elif is_registered:
+            status = "Allowed"
+            parking_message = "Checking parking bay..."
+        else:
+            status = "Pending Verification"
+            parking_message = "Barrier LOCKED. Officer guest authorization required."
 
         # 0. Check Parking Status & Presence First (Always computed for accurate UI/Gate state)
         parking_assigned = False
         parking_slot_name = None
-        parking_message = "Barrier LOCKED. Guest Pass authorization required." if not is_registered else "Checking parking bay..."
+        if not is_registered and not active_alert:
+            parking_message = "Barrier LOCKED. Officer guest authorization required."
+
         is_already_parked = False
         in_transit_buffer = False
         transit_remaining_sec = 0
         stay_seconds = 0
+        in_exit_cooldown = False
+        exit_cooldown_remaining_sec = 0
 
         # Check if vehicle is already inside (active ParkingSession OR open EntranceRecord)
-        from routes.entrance import find_open_entrance_record_by_plate
+        from routes.entrance import find_open_entrance_record_by_plate, check_post_exit_cooldown
         open_entrance = find_open_entrance_record_by_plate(db, effective_plate)
 
         active_session = None
@@ -260,15 +287,58 @@ def upload_image(
                     parking_message = f"Vehicle is currently parked in slot {parking_slot_name} (Stay: {stay_seconds}s)."
             else:
                 parking_message = f"Vehicle is currently parked in slot {parking_slot_name}."
+        else:
+            # 60-Second Post-Exit Re-Entry Protection Check
+            in_exit_cooldown, exit_cooldown_remaining_sec = check_post_exit_cooldown(
+                db, effective_plate, vehicle.id if vehicle else None, 60
+            )
+            if in_exit_cooldown:
+                parking_message = f"Vehicle recently exited — transit cooldown active ({exit_cooldown_remaining_sec}s remaining). Re-entry locked."
 
-        # 1. Cooldown & Deduplication Check
-        is_duplicate, remaining_sec = is_plate_in_cooldown(effective_plate)
+        # Temporal Consensus Evaluation
+        consensus_info = best_det.get("consensus") or {}
+        consensus_state = consensus_info.get("status", "confirmed")
+        
+        # Decide if this reading is CONFIRMED or still in VOTING pool
+        # High confidence (>=0.90), explicit manual/strict checks, or multi-frame consensus confirms the result
+        is_confirmed = (
+            consensus_state == "confirmed" or 
+            conf >= 0.90 or 
+            verification_mode in ("manual", "strict", "upload")
+        )
+
+        # Gate Collider Rule: Red Line Trigger on Non-Parked Vehicle = Street Traffic Ignored!
+        if gate_line == "RED" and not is_already_parked:
+            return {
+                "message": f"Public road traffic filtered: Vehicle '{effective_plate}' is passing on the street.",
+                "filename": filename,
+                "path": str(file_path),
+                "detected": True,
+                "recognized_plate": effective_plate,
+                "raw_plate": raw_plate,
+                "confidence": conf,
+                "valid": True,
+                "bbox": bbox,
+                "plate_category": cat,
+                "status": "Ignored",
+                "action_type": "street_traffic_ignored",
+                "is_ignored": True,
+                "is_departure": False,
+                "is_parked": False,
+                "is_registered": is_registered,
+                "gate_line": "RED",
+                "parking_message": f"🛡️ Street traffic filtered: '{effective_plate}' is passing outside on public road."
+            }
+
+        # 1. Cooldown & Deduplication Check (Only updates cooldown cache if confirmed!)
+        is_duplicate, remaining_sec = is_plate_in_cooldown(effective_plate, update_cache=is_confirmed)
+
 
         log_entry = None
         alert_entry = None
 
-        if not is_duplicate:
-            # Log new detection event to database
+        if is_confirmed and not is_duplicate:
+            # Log new detection event to database (Status: Allowed or Pending Verification)
             log_entry = DetectionLog(
                 plate_number=effective_plate,
                 snapshot=filename,
@@ -278,19 +348,8 @@ def upload_image(
             db.commit()
             db.refresh(log_entry)
 
-            # Alert if flagged (Unregistered / Denied vehicle)
-            if status == "Flagged":
-                alert_entry = Alert(
-                    plate_number=effective_plate,
-                    reason="Unregistered / Flagged vehicle detected at gate. Barrier kept CLOSED.",
-                    snapshot=filename
-                )
-                db.add(alert_entry)
-                db.commit()
-                db.refresh(alert_entry)
-
-            # Parking Assignment on Entrance (ONLY for arriving registered vehicles)
-            if not is_already_parked and is_registered and vehicle:
+            # Parking Assignment on Entrance (ONLY for arriving registered vehicles NOT in exit cooldown)
+            if not is_already_parked and not in_exit_cooldown and is_registered and vehicle:
                 can_auto_admit = (
                     verification_mode != "strict" and
                     (verification_mode == "auto" or (verification_mode == "smart" and conf >= 0.75))
@@ -333,35 +392,55 @@ def upload_image(
                 else:
                     parking_message = "Strict Verification: Officer confirmation required before entry."
 
-        action_type = "transit_buffer" if in_transit_buffer else ("exit" if is_already_parked else ("entrance" if is_registered else "unregistered_hold"))
+        action_type = "transit_buffer" if in_transit_buffer else (
+            "exit_cooldown" if in_exit_cooldown else (
+                "exit" if is_already_parked else ("entrance" if is_registered else "unregistered_hold")
+            )
+        )
 
         # 4. Broadcast Real-time event via WebSocket
         try:
             from websocket_manager import ws_manager
+            event_type = "DETECTION_ALERT" if status == "Flagged" else "DETECTION_EVENT"
+            ws_payload = {
+                "plate_number": effective_plate,
+                "raw_plate": raw_plate,
+                "normalized_plate": norm_plate,
+                "category": cat,
+                "confidence": conf,
+                "valid": valid,
+                "status": status,
+                "is_flagged": status == "Flagged",
+                "alert_reason": active_alert.reason if active_alert else None,
+                "consensus_state": consensus_state,
+                "is_confirmed": is_confirmed,
+                "is_registered": is_registered,
+                "is_authorized": is_registered and status != "Flagged",
+                "is_parked": is_already_parked,
+                "in_transit_buffer": in_transit_buffer,
+                "transit_remaining_sec": transit_remaining_sec,
+                "in_exit_cooldown": in_exit_cooldown,
+                "exit_cooldown_remaining_sec": exit_cooldown_remaining_sec,
+                "stay_seconds": stay_seconds,
+                "action_type": action_type,
+                "parking_slot": parking_slot_name,
+                "parking_message": parking_message,
+                "vehicle_bbox": vehicle_bbox,
+                "vehicle_type": vehicle_type,
+                "track_id": track_id,
+                "snapshot": filename,
+                "crop_snapshot": crop_filename,
+                "timestamp": datetime.now().isoformat()
+            }
             ws_manager.broadcast_sync({
-                "event": "DETECTION_EVENT",
-                "data": {
-                    "plate_number": effective_plate,
-                    "raw_plate": raw_plate,
-                    "normalized_plate": norm_plate,
-                    "category": cat,
-                    "confidence": conf,
-                    "valid": valid,
-                    "status": status,
-                    "is_registered": is_registered,
-                    "is_authorized": is_registered,
-                    "is_parked": is_already_parked,
-                    "in_transit_buffer": in_transit_buffer,
-                    "transit_remaining_sec": transit_remaining_sec,
-                    "stay_seconds": stay_seconds,
-                    "action_type": action_type,
-                    "parking_slot": parking_slot_name,
-                    "parking_message": parking_message,
-                    "snapshot": filename,
-                    "crop_snapshot": crop_filename,
-                    "timestamp": datetime.now().isoformat()
-                }
+                "event": event_type,
+                "data": ws_payload
             })
+            if status == "Flagged":
+                ws_manager.broadcast_sync({
+                    "event": "DETECTION_EVENT",
+                    "data": ws_payload
+                })
         except Exception:
             pass
 
@@ -378,13 +457,26 @@ def upload_image(
             "confidence": conf,
             "valid": valid,
             "bbox": bbox,
+            "vehicle_bbox": vehicle_bbox,
+            "vehicle_type": vehicle_type,
+            "track_id": track_id,
+            "track_history": track_history,
             "status": status,
+
+
+            "consensus_state": consensus_state,
+            "is_confirmed": is_confirmed,
+            "voting_frames": consensus_info.get("total_frames", 1),
+            "agreeing_frames": consensus_info.get("agreeing_frames", 1),
             "found": is_registered,
             "is_registered": is_registered,
             "is_authorized": is_registered,
+            "requires_verification": not is_registered,
             "is_parked": is_already_parked,
             "in_transit_buffer": in_transit_buffer,
             "transit_remaining_sec": transit_remaining_sec,
+            "in_exit_cooldown": in_exit_cooldown,
+            "exit_cooldown_remaining_sec": exit_cooldown_remaining_sec,
             "stay_seconds": stay_seconds,
             "action_type": action_type,
             "is_duplicate": is_duplicate,
@@ -460,8 +552,10 @@ def manual_check(
     in_transit_buffer = False
     transit_remaining_sec = 0
     stay_seconds = 0
+    in_exit_cooldown = False
+    exit_cooldown_remaining_sec = 0
 
-    from routes.entrance import find_open_entrance_record_by_plate
+    from routes.entrance import find_open_entrance_record_by_plate, check_post_exit_cooldown
     open_entrance = find_open_entrance_record_by_plate(db, plate_number)
 
     active_session = None
@@ -509,49 +603,60 @@ def manual_check(
                 parking_message = f"Vehicle is currently parked in slot {parking_slot_name} (Stay: {stay_seconds}s)."
         else:
             parking_message = f"Vehicle is currently parked in slot {parking_slot_name}."
-    elif is_registered and vehicle:
-        verif_mode = getattr(request, "verification_mode", "smart") or "smart"
-        can_auto_admit = (verif_mode != "strict")
+    else:
+        # 60-Second Post-Exit Re-Entry Protection Check
+        in_exit_cooldown, exit_cooldown_remaining_sec = check_post_exit_cooldown(
+            db, plate_number, vehicle.id if vehicle else None, 60
+        )
+        if in_exit_cooldown:
+            parking_message = f"Vehicle recently exited — transit cooldown active ({exit_cooldown_remaining_sec}s remaining). Re-entry locked."
+        elif is_registered and vehicle:
+            verif_mode = getattr(request, "verification_mode", "smart") or "smart"
+            can_auto_admit = (verif_mode != "strict")
 
-        if can_auto_admit:
-            available_slot = db.query(ParkingSlot).filter(
-                ParkingSlot.status == "Available"
-            ).order_by(ParkingSlot.slot_name).first()
+            if can_auto_admit:
+                available_slot = db.query(ParkingSlot).filter(
+                    ParkingSlot.status == "Available"
+                ).order_by(ParkingSlot.slot_name).first()
 
-            if available_slot:
-                session = ParkingSession(
-                    vehicle_id=vehicle.id,
-                    slot_id=available_slot.id,
-                    status="Active"
-                )
-                db.add(session)
-                available_slot.status = "Occupied"
-                db.commit()
-                db.refresh(session)
-                parking_assigned = True
-                parking_slot_name = available_slot.slot_name
-                parking_message = f"Assigned to parking slot {available_slot.slot_name}."
+                if available_slot:
+                    session = ParkingSession(
+                        vehicle_id=vehicle.id,
+                        slot_id=available_slot.id,
+                        status="Active"
+                    )
+                    db.add(session)
+                    available_slot.status = "Occupied"
+                    db.commit()
+                    db.refresh(session)
+                    parking_assigned = True
+                    parking_slot_name = available_slot.slot_name
+                    parking_message = f"Assigned to parking slot {available_slot.slot_name}."
+                else:
+                    parking_message = "All parking slots are fully occupied."
+
+                # Log Entrance Record only if NOT already parked
+                from routes.entrance import prepare_new_entrance_record
+                existing_rec = prepare_new_entrance_record(db, vehicle.plate_number)
+                if not existing_rec:
+                    entrance_record = EntranceRecord(
+                        plate_number=vehicle.plate_number,
+                        vehicle_id=vehicle.id,
+                        snapshot=vehicle.vehicle_image,
+                        parking_slot=parking_slot_name,
+                        status="Approved",
+                        entrance_time=datetime.now()
+                    )
+                    db.add(entrance_record)
+                    db.commit()
             else:
-                parking_message = "All parking slots are fully occupied."
+                parking_message = "Strict Mode: Guard confirmation required before admission."
 
-            # Log Entrance Record only if NOT already parked
-            from routes.entrance import prepare_new_entrance_record
-            existing_rec = prepare_new_entrance_record(db, vehicle.plate_number)
-            if not existing_rec:
-                entrance_record = EntranceRecord(
-                    plate_number=vehicle.plate_number,
-                    vehicle_id=vehicle.id,
-                    snapshot=vehicle.vehicle_image,
-                    parking_slot=parking_slot_name,
-                    status="Approved",
-                    entrance_time=datetime.now()
-                )
-                db.add(entrance_record)
-                db.commit()
-        else:
-            parking_message = "Strict Mode: Guard confirmation required before admission."
-
-    action_type = "transit_buffer" if in_transit_buffer else ("exit" if is_already_parked else ("entrance" if is_registered else "unregistered_hold"))
+    action_type = "transit_buffer" if in_transit_buffer else (
+        "exit_cooldown" if in_exit_cooldown else (
+            "exit" if is_already_parked else ("entrance" if is_registered else "unregistered_hold")
+        )
+    )
 
     response_payload = {
         "status": status,
@@ -561,6 +666,8 @@ def manual_check(
         "is_parked": is_already_parked,
         "in_transit_buffer": in_transit_buffer,
         "transit_remaining_sec": transit_remaining_sec,
+        "in_exit_cooldown": in_exit_cooldown,
+        "exit_cooldown_remaining_sec": exit_cooldown_remaining_sec,
         "stay_seconds": stay_seconds,
         "action_type": action_type,
         "vehicle": {
@@ -582,16 +689,30 @@ def manual_check(
     # Broadcast real-time detection event via WebSocket
     try:
         from websocket_manager import ws_manager
+        event_type = "DETECTION_ALERT" if status == "Flagged" else "DETECTION_EVENT"
         ws_manager.broadcast_sync({
-            "event": "DETECTION_EVENT",
+            "event": event_type,
             "data": {
                 "plate_number": plate_number,
                 "status": status,
+                "is_flagged": status == "Flagged",
                 "parking_slot": parking_slot_name,
                 "parking_message": parking_message,
                 "timestamp": datetime.now().isoformat()
             }
         })
+        if status == "Flagged":
+            ws_manager.broadcast_sync({
+                "event": "DETECTION_EVENT",
+                "data": {
+                    "plate_number": plate_number,
+                    "status": status,
+                    "is_flagged": True,
+                    "parking_slot": parking_slot_name,
+                    "parking_message": parking_message,
+                    "timestamp": datetime.now().isoformat()
+                }
+            })
     except Exception:
         pass
 

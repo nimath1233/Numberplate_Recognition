@@ -4,20 +4,30 @@ from models import Base
 from config import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
 
 
-DATABASE_URL = (
-    f"postgresql://{DB_USER}:{DB_PASSWORD}"
-    f"@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-)
+import urllib.parse
+import os
+
+_ENV_DATABASE_URL = os.getenv("DATABASE_URL")
+
+if _ENV_DATABASE_URL:
+    DATABASE_URL = _ENV_DATABASE_URL
+else:
+    _SAFE_PASSWORD = urllib.parse.quote_plus(DB_PASSWORD)
+    DATABASE_URL = (
+        f"postgresql://{DB_USER}:{_SAFE_PASSWORD}"
+        f"@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    )
+
 
 
 
 engine = create_engine(
     DATABASE_URL,
     echo=False,
-    pool_size=20,
-    max_overflow=20,
-    pool_timeout=60,
-    pool_recycle=1800,
+    pool_size=10,
+    max_overflow=10,
+    pool_timeout=20,
+    pool_recycle=300,
     pool_pre_ping=True
 )
 
@@ -27,11 +37,15 @@ SessionLocal = sessionmaker(
     autoflush=False,
     bind=engine
 )
-Base.metadata.create_all(bind=engine)
+
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as _init_err:
+    print(f"Warning: Database metadata create_all deferred: {_init_err}")
 
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
-        db.close()
+        db.close()

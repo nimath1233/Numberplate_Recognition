@@ -6,10 +6,18 @@ import os
 import re
 import uuid
 import shutil
+import json
 
 from database import get_db
 from models import Vehicle, EntranceRecord, ParkingSlot, ParkingSession, DetectionLog, Alert
-from schemas import EntranceRecordCreate, GuestAuthorizeRequest, GuestDenyRequest
+from schemas import (
+    EntranceRecordCreate,
+    GuestAuthorizeRequest,
+    GuestDenyRequest,
+    GateCollidersConfig,
+    GateTriggerRequest
+)
+
 
 router = APIRouter(
     prefix="/entrance",
@@ -18,9 +26,91 @@ router = APIRouter(
 
 from pathlib import Path
 from config import UPLOAD_DIR
+import time
 
 UPLOAD_FOLDER = UPLOAD_DIR
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+
+# In-memory post-exit cooldown cache: { clean_plate_string: exit_unix_timestamp }
+recent_exits_cache: dict[str, float] = {}
+
+def record_vehicle_exit_timestamp(plate_number: str):
+    """Record an exit event timestamp for immediate post-exit re-entry cooldown checks."""
+    if not plate_number:
+        return
+    clean = re.sub(r'[\s\-_]', '', str(plate_number).strip().upper())
+    if clean and clean not in ("UNKNOWN", "NOPLATE"):
+        recent_exits_cache[clean] = time.time()
+
+
+def check_post_exit_cooldown(db: Session, plate_number: str, vehicle_id: int | None = None, cooldown_seconds: int = 60) -> tuple[bool, int]:
+    """
+    Check if the vehicle exited within the last `cooldown_seconds` (default 60s).
+    Enforces post-exit re-entry protection to prevent immediate re-entry loop.
+    Returns: (is_in_cooldown: bool, remaining_seconds: int)
+    """
+    if not plate_number:
+        return False, 0
+    clean_target = re.sub(r'[\s\-_]', '', str(plate_number).strip().upper())
+    if not clean_target or clean_target in ("UNKNOWN", "NOPLATE"):
+        return False, 0
+
+    now_unix = time.time()
+
+    # 1. Quick in-memory cache check
+    mem_exit = recent_exits_cache.get(clean_target)
+    if mem_exit and (now_unix - mem_exit < cooldown_seconds):
+        rem = int(cooldown_seconds - (now_unix - mem_exit))
+        return True, max(1, rem)
+
+    now_dt = datetime.now()
+
+    # 2. Database EntranceRecord check for most recent exit
+    recent_closed = db.query(EntranceRecord).filter(
+        EntranceRecord.exit_time.isnot(None)
+    ).order_by(EntranceRecord.exit_time.desc()).limit(30).all()
+
+    for rec in recent_closed:
+        if rec.plate_number:
+            rec_clean = re.sub(r'[\s\-_]', '', rec.plate_number.strip().upper())
+            if rec_clean == clean_target:
+                exit_ts = rec.exit_time
+                if exit_ts:
+                    if exit_ts.tzinfo is not None and now_dt.tzinfo is None:
+                        from datetime import timezone
+                        now_dt = datetime.now(timezone.utc)
+                    elif exit_ts.tzinfo is None and now_dt.tzinfo is not None:
+                        exit_ts = exit_ts.replace(tzinfo=now_dt.tzinfo)
+
+                    secs_since_exit = (now_dt - exit_ts).total_seconds()
+                    if 0 <= secs_since_exit < cooldown_seconds:
+                        rem = int(cooldown_seconds - secs_since_exit)
+                        recent_exits_cache[clean_target] = now_unix - secs_since_exit
+                        return True, max(1, rem)
+                break
+
+    # 3. Database ParkingSession check if vehicle_id is provided
+    if vehicle_id:
+        sess = db.query(ParkingSession).filter(
+            ParkingSession.vehicle_id == vehicle_id,
+            ParkingSession.status == "Completed",
+            ParkingSession.exit_time.isnot(None)
+        ).order_by(ParkingSession.exit_time.desc()).first()
+        if sess and sess.exit_time:
+            exit_ts = sess.exit_time
+            if exit_ts.tzinfo is not None and now_dt.tzinfo is None:
+                from datetime import timezone
+                now_dt = datetime.now(timezone.utc)
+            elif exit_ts.tzinfo is None and now_dt.tzinfo is not None:
+                exit_ts = exit_ts.replace(tzinfo=now_dt.tzinfo)
+
+            secs_since_exit = (now_dt - exit_ts).total_seconds()
+            if 0 <= secs_since_exit < cooldown_seconds:
+                rem = int(cooldown_seconds - secs_since_exit)
+                recent_exits_cache[clean_target] = now_unix - secs_since_exit
+                return True, max(1, rem)
+
+    return False, 0
 
 
 def get_first_available_slot(db: Session):
@@ -252,6 +342,7 @@ def process_vehicle_entrance(
                 slot.status = "Available"
 
         db.commit()
+        record_vehicle_exit_timestamp(clean_plate)
 
         hours = total_seconds // 3600
         mins = (total_seconds % 3600) // 60
@@ -268,6 +359,23 @@ def process_vehicle_entrance(
             "owner_name": vehicle.owner_name,
             "duration_text": duration_text,
             "status": "Exit Authorized"
+        }
+
+    # 2.5. Check 60-SECOND POST-EXIT RE-ENTRY COOLDOWN:
+    # If vehicle exited within the last 60 seconds, DO NOT create another EntranceRecord or assign a slot!
+    in_exit_cd, exit_cd_rem = check_post_exit_cooldown(db, clean_plate, vehicle.id if vehicle else None, 60)
+    if in_exit_cd:
+        return {
+            "success": True,
+            "is_departure": False,
+            "in_post_exit_cooldown": True,
+            "exit_cooldown_remaining_sec": exit_cd_rem,
+            "message": f"Vehicle recently exited — transit cooldown active ({exit_cd_rem}s remaining). Re-entry locked.",
+            "plate_number": clean_plate,
+            "slot_name": "Re-entry Cooldown",
+            "category": getattr(vehicle, "category", "Car") or "Car",
+            "owner_name": vehicle.owner_name,
+            "status": "Transit Cooldown"
         }
 
     # 3. Accept and resolve real snapshot
@@ -426,6 +534,7 @@ def authorize_guest_entrance(
                 slot.status = "Available"
 
         db.commit()
+        record_vehicle_exit_timestamp(clean_plate)
 
         hours = total_seconds // 3600
         mins = (total_seconds % 3600) // 60
@@ -442,6 +551,23 @@ def authorize_guest_entrance(
             "owner_name": getattr(vehicle, "owner_name", None) or "Guest",
             "duration_text": duration_text,
             "status": "Exit Authorized"
+        }
+
+    # 2.5. Check 60-SECOND POST-EXIT RE-ENTRY COOLDOWN:
+    # If guest vehicle exited within the last 60 seconds, DO NOT create another EntranceRecord or assign a slot!
+    in_exit_cd, exit_cd_rem = check_post_exit_cooldown(db, clean_plate, vehicle.id if vehicle else None, 60)
+    if in_exit_cd:
+        return {
+            "success": True,
+            "is_departure": False,
+            "in_post_exit_cooldown": True,
+            "exit_cooldown_remaining_sec": exit_cd_rem,
+            "message": f"Guest Vehicle recently exited — transit cooldown active ({exit_cd_rem}s remaining). Re-entry locked.",
+            "plate_number": clean_plate,
+            "slot_name": "Re-entry Cooldown",
+            "category": getattr(vehicle, "category", "Car") or "Car",
+            "owner_name": getattr(vehicle, "owner_name", None) or "Guest",
+            "status": "Transit Cooldown"
         }
 
     assigned_slot = None
@@ -531,6 +657,24 @@ def deny_guest_entrance(
     )
     db.add(security_alert)
     db.commit()
+    db.refresh(security_alert)
+
+    # 3. Broadcast real-time WebSocket alert event
+    try:
+        from websocket_manager import ws_manager
+        ws_manager.broadcast_sync({
+            "event": "DETECTION_ALERT",
+            "data": {
+                "id": security_alert.id,
+                "plate_number": clean_plate,
+                "reason": security_alert.reason,
+                "snapshot": real_snap,
+                "status": "Flagged",
+                "alert_time": security_alert.alert_time.isoformat() if security_alert.alert_time else datetime.now().isoformat()
+            }
+        })
+    except Exception as e:
+        print("WebSocket guest deny alert warning:", e)
 
     return {
         "success": True,
@@ -806,3 +950,252 @@ def clear_all_entrance_records(
     db.query(EntranceRecord).delete()
     db.commit()
     return {"message": "All entrance records cleared successfully"}
+
+
+# =============================================================================
+# SMART SINGLE-GATE ANPR COLLIDER & STATE ENGINE
+# =============================================================================
+
+COLLIDERS_FILE = UPLOAD_DIR.parent / "gate_colliders.json"
+
+DEFAULT_GATE_COLLIDERS = {
+    "pin_a": {"x": 60.0, "y": 140.0},
+    "pin_b": {"x": 580.0, "y": 140.0},
+    "pin_c": {"x": 60.0, "y": 380.0},
+    "pin_d": {"x": 580.0, "y": 380.0},
+    "gate_width_cm": 430.0,
+    "driveway_depth_cm": 550.0
+}
+
+
+def load_saved_gate_colliders() -> dict:
+    if COLLIDERS_FILE.exists():
+        try:
+            with open(COLLIDERS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print("Error reading gate colliders file:", e)
+    return DEFAULT_GATE_COLLIDERS.copy()
+
+
+def save_gate_colliders_to_file(data: dict):
+    try:
+        with open(COLLIDERS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        print("Error saving gate colliders file:", e)
+
+
+@router.get("/gate-colliders")
+def get_gate_colliders():
+    """Retrieve the 4-point gate collider calibration parameters and metric measurements."""
+    return load_saved_gate_colliders()
+
+
+@router.post("/gate-colliders")
+def update_gate_colliders(config: GateCollidersConfig):
+    """Save calibrated virtual collision lines and gate metric dimensions."""
+    data = config.model_dump()
+    save_gate_colliders_to_file(data)
+    return {
+        "success": True,
+        "message": "Gate collider settings saved successfully.",
+        "config": data
+    }
+
+
+@router.post("/gate-trigger")
+def process_gate_trigger(
+    data: GateTriggerRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Core Single-Gate ANPR Decision Engine:
+    1. GREEN Line Trigger: Arriving vehicle entering company premises.
+       - Auto-assigns available parking slot, marks vehicle inside, stamps entrance_time.
+    2. RED Line Trigger: Outer gate boundary.
+       - If vehicle is currently INSIDE -> Authorizes departure, frees parking slot, stamps exit_time.
+       - If vehicle was NOT inside (e.g. passing on street) -> IGNORES cleanly with NO false records!
+    """
+    clean_plate = str(data.plate_number or "").strip().upper()
+    if not clean_plate:
+        raise HTTPException(status_code=400, detail="Plate number cannot be empty")
+
+    clean_no_spaces = re.sub(r'[\s\-_]', '', clean_plate)
+    line = (data.line_trigger or "GREEN").strip().upper()
+    now = datetime.now()
+
+    # Find vehicle profile in database if registered
+    all_vehicles = db.query(Vehicle).all()
+    vehicle = None
+    for v in all_vehicles:
+        if v.plate_number and re.sub(r'[\s\-_]', '', v.plate_number.strip().upper()) == clean_no_spaces:
+            vehicle = v
+            break
+
+    # =========================================================================
+    # SITUATION 1: GREEN LINE TRIGGER (Vehicle Arriving / Entering Premises)
+    # =========================================================================
+    if line == "GREEN":
+        # Check if already inside
+        open_rec = find_open_entrance_record_by_plate(db, clean_plate)
+        if open_rec:
+            entry_ts = open_rec.entrance_time or now
+            sec_inside = max(0, int((now - entry_ts).total_seconds()))
+            return {
+                "success": True,
+                "direction": "ENTRY",
+                "action": "IN_TRANSIT",
+                "is_departure": False,
+                "is_ignored": False,
+                "message": f"Vehicle '{clean_plate}' is currently inside premises (Entered {sec_inside}s ago). Gate active.",
+                "plate_number": clean_plate,
+                "slot_name": open_rec.parking_slot or "Assigned",
+                "category": getattr(vehicle, "category", "Car") or "Car",
+                "owner_name": getattr(vehicle, "owner_name", "Registered User") if vehicle else "Guest",
+                "status": "In Transit"
+            }
+
+        # If vehicle is registered permanent vehicle
+        if vehicle and not vehicle.is_guest:
+            return process_vehicle_entrance(
+                db=db,
+                plate_number=clean_plate,
+                snapshot_path=data.snapshot,
+                status="Approved"
+            )
+        else:
+            # Guest or visitor vehicle arriving at Green Line
+            if not vehicle:
+                vehicle = Vehicle(
+                    plate_number=clean_plate,
+                    owner_name="Guest / Visitor",
+                    owner_id="GUEST-PASS",
+                    vehicle_model=data.vehicle_model or "Visitor Vehicle",
+                    category=data.category or "Car",
+                    is_guest=True
+                )
+                db.add(vehicle)
+                db.commit()
+                db.refresh(vehicle)
+
+            avail_slot = get_first_available_slot(db)
+            assigned_slot = avail_slot.slot_name if avail_slot else "Visitor Area"
+            if avail_slot:
+                session = ParkingSession(
+                    vehicle_id=vehicle.id,
+                    slot_id=avail_slot.id,
+                    status="Active"
+                )
+                db.add(session)
+                avail_slot.status = "Occupied"
+
+            prepare_new_entrance_record(db, clean_plate, now)
+            real_snap = resolve_real_snapshot(db, clean_plate, data.snapshot, vehicle)
+            record = EntranceRecord(
+                plate_number=clean_plate,
+                vehicle_id=vehicle.id,
+                snapshot=real_snap,
+                parking_slot=assigned_slot,
+                status="Guest Approved",
+                entrance_time=now
+            )
+            db.add(record)
+
+            allowed_log = DetectionLog(
+                plate_number=clean_plate,
+                snapshot=real_snap,
+                status="Allowed",
+                detection_time=now
+            )
+            db.add(allowed_log)
+            db.commit()
+            db.refresh(record)
+
+            return {
+                "success": True,
+                "direction": "ENTRY",
+                "action": "AUTHORIZED_ENTRY",
+                "is_departure": False,
+                "is_guest": True,
+                "is_ignored": False,
+                "message": f"🟢 Arriving Guest Vehicle '{clean_plate}' entered premises. Assigned Bay: {assigned_slot}",
+                "plate_number": clean_plate,
+                "slot_name": assigned_slot,
+                "category": vehicle.category or "Car",
+                "owner_name": vehicle.owner_name,
+                "status": "Guest Approved"
+            }
+
+    # =========================================================================
+    # SITUATION 2 & 3: RED LINE TRIGGER (Outer Gate Boundary)
+    # =========================================================================
+    elif line == "RED":
+        # Check if vehicle is currently inside premises
+        open_rec = find_open_entrance_record_by_plate(db, clean_plate)
+
+        if open_rec:
+            # SITUATION 2: Legitimate Departing Vehicle Exiting Premises
+            open_rec.exit_time = now
+            open_rec.status = "Approved"
+
+            # Close active parking session & free parking slot
+            if vehicle:
+                active_sess = db.query(ParkingSession).filter(
+                    ParkingSession.vehicle_id == vehicle.id,
+                    ParkingSession.status == "Active"
+                ).first()
+                if active_sess:
+                    active_sess.exit_time = now
+                    active_sess.status = "Completed"
+                    slot = db.query(ParkingSlot).filter(ParkingSlot.id == active_sess.slot_id).first()
+                    if slot:
+                        slot.status = "Available"
+
+            # Also ensure slot named in open_rec is freed
+            if open_rec.parking_slot:
+                slot = db.query(ParkingSlot).filter(ParkingSlot.slot_name == open_rec.parking_slot).first()
+                if slot:
+                    slot.status = "Available"
+
+            db.commit()
+            record_vehicle_exit_timestamp(clean_plate)
+
+            entry_ts = open_rec.entrance_time or now
+            total_sec = max(0, int((now - entry_ts).total_seconds()))
+            hrs = total_sec // 3600
+            mins = (total_sec % 3600) // 60
+            secs = total_sec % 60
+            dur_text = f"{hrs}h {mins}m" if hrs > 0 else (f"{mins}m {secs}s" if mins > 0 else f"{secs}s")
+
+            return {
+                "success": True,
+                "direction": "EXIT",
+                "action": "AUTHORIZED_EXIT",
+                "is_departure": True,
+                "is_ignored": False,
+                "message": f"🔴 Departing Vehicle '{clean_plate}' verified. Exit Authorized & Bay '{open_rec.parking_slot or 'N/A'}' freed (Stayed {dur_text}).",
+                "plate_number": clean_plate,
+                "slot_name": open_rec.parking_slot or "Unassigned",
+                "category": getattr(vehicle, "category", "Car") if vehicle else "Car",
+                "owner_name": getattr(vehicle, "owner_name", "Visitor") if vehicle else "Visitor",
+                "duration_text": dur_text,
+                "status": "Exit Authorized"
+            }
+        else:
+            # SITUATION 3: Passing Public Street Traffic (False Alarm Filter)
+            # Vehicle was never recorded inside premises!
+            return {
+                "success": True,
+                "direction": "STREET_TRAFFIC",
+                "action": "IGNORED",
+                "is_departure": False,
+                "is_ignored": True,
+                "message": f"🛡️ Public Street Traffic Filtered: Vehicle '{clean_plate}' is not inside premises. Event ignored cleanly.",
+                "plate_number": clean_plate,
+                "status": "Ignored"
+            }
+
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown line trigger '{line}'. Must be 'GREEN' or 'RED'.")
+

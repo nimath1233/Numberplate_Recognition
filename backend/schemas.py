@@ -91,6 +91,29 @@ class GuestDenyRequest(BaseModel):
     snapshot: str | None = None
 
 
+class AlertCreate(BaseModel):
+    plate_number: str
+    reason: str | None = "Security alert logged"
+    snapshot: str | None = None
 
 
+class GateColliderPin(BaseModel):
+    x: float
+    y: float
 
+
+class GateCollidersConfig(BaseModel):
+    pin_a: GateColliderPin
+    pin_b: GateColliderPin
+    pin_c: GateColliderPin
+    pin_d: GateColliderPin
+    gate_width_cm: float = 430.0
+    driveway_depth_cm: float = 550.0
+
+
+class GateTriggerRequest(BaseModel):
+    plate_number: str
+    line_trigger: str  # "GREEN" (Arriving / Inner Line) or "RED" (Departing / Outer Gate Line)
+    snapshot: str | None = None
+    vehicle_model: str | None = None
+    category: str | None = "Car"
