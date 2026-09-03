@@ -43,73 +43,11 @@ def record_vehicle_exit_timestamp(plate_number: str):
         recent_exits_cache[clean] = time.time()
 
 
-def check_post_exit_cooldown(db: Session, plate_number: str, vehicle_id: int | None = None, cooldown_seconds: int = 60) -> tuple[bool, int]:
+def check_post_exit_cooldown(db: Session, plate_number: str, vehicle_id: int | None = None, cooldown_seconds: int = 0) -> tuple[bool, int]:
     """
-    Check if the vehicle exited within the last `cooldown_seconds` (default 60s).
-    Enforces post-exit re-entry protection to prevent immediate re-entry loop.
-    Returns: (is_in_cooldown: bool, remaining_seconds: int)
+    Directional virtual lines (GREEN/RED) manage entry/exit states directly.
+    Time-based exit cooldown is disabled.
     """
-    if not plate_number:
-        return False, 0
-    clean_target = re.sub(r'[\s\-_]', '', str(plate_number).strip().upper())
-    if not clean_target or clean_target in ("UNKNOWN", "NOPLATE"):
-        return False, 0
-
-    now_unix = time.time()
-
-    # 1. Quick in-memory cache check
-    mem_exit = recent_exits_cache.get(clean_target)
-    if mem_exit and (now_unix - mem_exit < cooldown_seconds):
-        rem = int(cooldown_seconds - (now_unix - mem_exit))
-        return True, max(1, rem)
-
-    now_dt = datetime.now()
-
-    # 2. Database EntranceRecord check for most recent exit
-    recent_closed = db.query(EntranceRecord).filter(
-        EntranceRecord.exit_time.isnot(None)
-    ).order_by(EntranceRecord.exit_time.desc()).limit(30).all()
-
-    for rec in recent_closed:
-        if rec.plate_number:
-            rec_clean = re.sub(r'[\s\-_]', '', rec.plate_number.strip().upper())
-            if rec_clean == clean_target:
-                exit_ts = rec.exit_time
-                if exit_ts:
-                    if exit_ts.tzinfo is not None and now_dt.tzinfo is None:
-                        from datetime import timezone
-                        now_dt = datetime.now(timezone.utc)
-                    elif exit_ts.tzinfo is None and now_dt.tzinfo is not None:
-                        exit_ts = exit_ts.replace(tzinfo=now_dt.tzinfo)
-
-                    secs_since_exit = (now_dt - exit_ts).total_seconds()
-                    if 0 <= secs_since_exit < cooldown_seconds:
-                        rem = int(cooldown_seconds - secs_since_exit)
-                        recent_exits_cache[clean_target] = now_unix - secs_since_exit
-                        return True, max(1, rem)
-                break
-
-    # 3. Database ParkingSession check if vehicle_id is provided
-    if vehicle_id:
-        sess = db.query(ParkingSession).filter(
-            ParkingSession.vehicle_id == vehicle_id,
-            ParkingSession.status == "Completed",
-            ParkingSession.exit_time.isnot(None)
-        ).order_by(ParkingSession.exit_time.desc()).first()
-        if sess and sess.exit_time:
-            exit_ts = sess.exit_time
-            if exit_ts.tzinfo is not None and now_dt.tzinfo is None:
-                from datetime import timezone
-                now_dt = datetime.now(timezone.utc)
-            elif exit_ts.tzinfo is None and now_dt.tzinfo is not None:
-                exit_ts = exit_ts.replace(tzinfo=now_dt.tzinfo)
-
-            secs_since_exit = (now_dt - exit_ts).total_seconds()
-            if 0 <= secs_since_exit < cooldown_seconds:
-                rem = int(cooldown_seconds - secs_since_exit)
-                recent_exits_cache[clean_target] = now_unix - secs_since_exit
-                return True, max(1, rem)
-
     return False, 0
 
 
@@ -153,6 +91,47 @@ def get_first_available_slot(db: Session):
     return None
 
 
+def get_plate_variants(plate: str) -> set[str]:
+    """
+    Generate canonical comparison variants for Sri Lankan plates.
+    Handles space/dash variations, 2-letter province prefixes (WP, CP, SP, SG, NC, NW, EP, UP, NP, SB),
+    and 1-letter OCR reflection artifacts.
+    """
+    if not plate:
+        return set()
+    clean = re.sub(r'[\s\-_]', '', str(plate).strip().upper())
+    if not clean or clean in ("UNKNOWN", "NOPLATE"):
+        return set()
+
+    variants = {clean}
+
+    # 2-letter Sri Lankan province codes
+    PROVINCES = ("WP", "CP", "SP", "SG", "NC", "NW", "EP", "UP", "NP", "SB")
+    for prov in PROVINCES:
+        if clean.startswith(prov) and len(clean) > len(prov) + 3:
+            variants.add(clean[len(prov):])
+
+    # 1-letter OCR province badge reflections / artifacts
+    SINGLE_PROV = ("W", "C", "S", "G", "N", "E", "U", "P")
+    if len(clean) >= 6 and clean[0] in SINGLE_PROV:
+        variants.add(clean[1:])
+
+    # Duplicate reflection artifact (e.g. WPP, LLN, etc.)
+    if len(clean) >= 7 and clean[0] == clean[1]:
+        variants.add(clean[1:])
+
+    return variants
+
+
+def are_plates_matching(p1: str, p2: str) -> bool:
+    """Check if two license plate strings refer to the same vehicle."""
+    if not p1 or not p2:
+        return False
+    v1 = get_plate_variants(p1)
+    v2 = get_plate_variants(p2)
+    return bool(v1 & v2)
+
+
 def cleanup_duplicate_open_entrance_records(db: Session):
     """
     Ensure each plate number only has AT MOST ONE active open EntranceRecord (exit_time is None).
@@ -161,21 +140,22 @@ def cleanup_duplicate_open_entrance_records(db: Session):
     try:
         open_recs = db.query(EntranceRecord).filter(
             EntranceRecord.exit_time.is_(None)
-        ).order_by(EntranceRecord.plate_number, EntranceRecord.entrance_time.desc()).all()
+        ).order_by(EntranceRecord.entrance_time.desc()).all()
 
-        seen_plates = set()
+        seen_variants = set()
         cleaned = False
 
         for rec in open_recs:
             plate = (rec.plate_number or "").strip().upper()
             if not plate:
                 continue
-            if plate in seen_plates:
-                # Older duplicate open record for the same plate! Auto-close it.
+            v_set = get_plate_variants(plate)
+            if v_set & seen_variants:
+                # Older duplicate open record for the same vehicle! Auto-close it.
                 rec.exit_time = rec.entrance_time or datetime.now()
                 cleaned = True
             else:
-                seen_plates.add(plate)
+                seen_variants.update(v_set)
 
         if cleaned:
             db.commit()
@@ -186,10 +166,9 @@ def cleanup_duplicate_open_entrance_records(db: Session):
 
 def find_open_entrance_record_by_plate(db: Session, plate_number: str):
     """
-    Search for active open EntranceRecord (exit_time is None) with space and hyphen insensitivity.
+    Search for active open EntranceRecord (exit_time is None) with space, hyphen, and Sri Lankan province prefix insensitivity.
     """
-    clean_target = re.sub(r'[\s\-_]', '', str(plate_number or "").strip().upper())
-    if not clean_target:
+    if not plate_number:
         return None
 
     open_recs = db.query(EntranceRecord).filter(
@@ -197,18 +176,15 @@ def find_open_entrance_record_by_plate(db: Session, plate_number: str):
     ).order_by(EntranceRecord.entrance_time.desc()).all()
 
     for rec in open_recs:
-        if rec.plate_number:
-            rec_clean = re.sub(r'[\s\-_]', '', rec.plate_number.strip().upper())
-            if rec_clean == clean_target:
-                return rec
+        if rec.plate_number and are_plates_matching(rec.plate_number, plate_number):
+            return rec
     return None
 
 
 def prepare_new_entrance_record(db: Session, plate_number: str, now: datetime = None):
     if not now:
         now = datetime.now()
-    clean_target = re.sub(r'[\s\-_]', '', str(plate_number or "").strip().upper())
-    if not clean_target:
+    if not plate_number:
         return None
 
     open_recs = db.query(EntranceRecord).filter(
@@ -216,7 +192,7 @@ def prepare_new_entrance_record(db: Session, plate_number: str, now: datetime = 
     ).order_by(EntranceRecord.entrance_time.desc()).all()
 
     plate_open_recs = [
-        r for r in open_recs if r.plate_number and re.sub(r'[\s\-_]', '', r.plate_number.strip().upper()) == clean_target
+        r for r in open_recs if r.plate_number and are_plates_matching(r.plate_number, plate_number)
     ]
 
     if plate_open_recs:
@@ -283,17 +259,14 @@ def process_vehicle_entrance(
     status: str = "Approved"
 ):
     clean_plate = plate_number.strip().upper()
-    clean_no_spaces = re.sub(r'[\s\-_]', '', clean_plate)
 
-    # 1. Search PostgreSQL database for plate number (space & hyphen insensitive)
+    # 1. Search database for plate number (matching province codes and variants)
     all_vehicles = db.query(Vehicle).all()
     vehicle = None
     for v in all_vehicles:
-        if v.plate_number:
-            v_clean = re.sub(r'[\s\-_]', '', v.plate_number.strip().upper())
-            if v_clean == clean_no_spaces:
-                vehicle = v
-                break
+        if v.plate_number and are_plates_matching(v.plate_number, clean_plate):
+            vehicle = v
+            break
 
     # Permanent registered vehicles enter automatically; Guest & Unregistered vehicles ALWAYS ask officer permission!
     if not vehicle or vehicle.is_guest:
@@ -307,75 +280,16 @@ def process_vehicle_entrance(
     open_rec = find_open_entrance_record_by_plate(db, clean_plate)
 
     if open_rec:
-        now = datetime.now()
-        entry_time = open_rec.entrance_time or now
-        total_seconds = max(0, int((now - entry_time).total_seconds()))
-
-        # 60-SECOND GATE TRANSIT BUFFER:
-        # If vehicle entered less than 60 seconds ago, DO NOT trigger exit!
-        if total_seconds < 60:
-            remaining_sec = max(0, 60 - total_seconds)
-            return {
-                "success": True,
-                "is_departure": False,
-                "in_transit_buffer": True,
-                "transit_remaining_sec": remaining_sec,
-                "message": f"Vehicle '{clean_plate}' entered {total_seconds}s ago (Gate transit in progress). Exit locked for {remaining_sec}s.",
-                "plate_number": clean_plate,
-                "slot_name": open_rec.parking_slot or "Assigned",
-                "category": getattr(vehicle, "category", "Car") or "Car",
-                "owner_name": vehicle.owner_name,
-                "status": "In Transit"
-            }
-
-        open_rec.exit_time = now
-
-        active_sess = db.query(ParkingSession).filter(
-            ParkingSession.vehicle_id == vehicle.id,
-            ParkingSession.status == "Active"
-        ).first()
-        if active_sess:
-            active_sess.exit_time = now
-            active_sess.status = "Completed"
-            slot = db.query(ParkingSlot).filter(ParkingSlot.id == active_sess.slot_id).first()
-            if slot:
-                slot.status = "Available"
-
-        db.commit()
-        record_vehicle_exit_timestamp(clean_plate)
-
-        hours = total_seconds // 3600
-        mins = (total_seconds % 3600) // 60
-        secs = total_seconds % 60
-        duration_text = f"{hours}h {mins}m" if hours > 0 else (f"{mins}m {secs}s" if mins > 0 else f"{secs}s")
-
-        return {
-            "success": True,
-            "is_departure": True,
-            "message": f"Vehicle '{clean_plate}' was ALREADY inside premises. Processed DEPARTURE (EXIT AUTHORIZED).",
-            "plate_number": clean_plate,
-            "slot_name": open_rec.parking_slot or "Unassigned",
-            "category": getattr(vehicle, "category", "Car") or "Car",
-            "owner_name": vehicle.owner_name,
-            "duration_text": duration_text,
-            "status": "Exit Authorized"
-        }
-
-    # 2.5. Check 60-SECOND POST-EXIT RE-ENTRY COOLDOWN:
-    # If vehicle exited within the last 60 seconds, DO NOT create another EntranceRecord or assign a slot!
-    in_exit_cd, exit_cd_rem = check_post_exit_cooldown(db, clean_plate, vehicle.id if vehicle else None, 60)
-    if in_exit_cd:
         return {
             "success": True,
             "is_departure": False,
-            "in_post_exit_cooldown": True,
-            "exit_cooldown_remaining_sec": exit_cd_rem,
-            "message": f"Vehicle recently exited — transit cooldown active ({exit_cd_rem}s remaining). Re-entry locked.",
+            "is_already_inside": True,
+            "message": f"Vehicle '{clean_plate}' is ALREADY inside premises (Bay: {open_rec.parking_slot or 'Assigned'}).",
             "plate_number": clean_plate,
-            "slot_name": "Re-entry Cooldown",
+            "slot_name": open_rec.parking_slot or "Assigned",
             "category": getattr(vehicle, "category", "Car") or "Car",
             "owner_name": vehicle.owner_name,
-            "status": "Transit Cooldown"
+            "status": "Already Inside"
         }
 
     # 3. Accept and resolve real snapshot
@@ -476,8 +390,14 @@ def authorize_guest_entrance(
     category = data.category or "Car"
     purpose = data.purpose or "Guest Visit"
 
-    # 1. Search or create guest vehicle
-    vehicle = db.query(Vehicle).filter(func.upper(Vehicle.plate_number) == clean_plate).first()
+    # 1. Search or create guest vehicle (matching province codes and variants)
+    all_v = db.query(Vehicle).all()
+    vehicle = None
+    for v in all_v:
+        if v.plate_number and are_plates_matching(v.plate_number, clean_plate):
+            vehicle = v
+            break
+
     if not vehicle:
         vehicle = Vehicle(
             plate_number=clean_plate,
@@ -499,75 +419,16 @@ def authorize_guest_entrance(
     open_rec = find_open_entrance_record_by_plate(db, clean_plate)
 
     if open_rec:
-        now = datetime.now()
-        entry_time = open_rec.entrance_time or now
-        total_seconds = max(0, int((now - entry_time).total_seconds()))
-
-        # 60-SECOND GATE TRANSIT BUFFER:
-        # If guest vehicle entered less than 60 seconds ago, DO NOT trigger exit!
-        if total_seconds < 60:
-            remaining_sec = max(0, 60 - total_seconds)
-            return {
-                "success": True,
-                "is_departure": False,
-                "in_transit_buffer": True,
-                "transit_remaining_sec": remaining_sec,
-                "message": f"Guest Vehicle '{clean_plate}' entered {total_seconds}s ago (Gate transit in progress). Exit locked for {remaining_sec}s.",
-                "plate_number": open_rec.plate_number,
-                "slot_name": open_rec.parking_slot or "Unassigned",
-                "category": getattr(vehicle, "category", "Car") or "Car",
-                "owner_name": getattr(vehicle, "owner_name", None) or "Guest",
-                "status": "In Transit"
-            }
-
-        open_rec.exit_time = now
-
-        active_sess = db.query(ParkingSession).filter(
-            ParkingSession.vehicle_id == vehicle.id,
-            ParkingSession.status == "Active"
-        ).first()
-        if active_sess:
-            active_sess.exit_time = now
-            active_sess.status = "Completed"
-            slot = db.query(ParkingSlot).filter(ParkingSlot.id == active_sess.slot_id).first()
-            if slot:
-                slot.status = "Available"
-
-        db.commit()
-        record_vehicle_exit_timestamp(clean_plate)
-
-        hours = total_seconds // 3600
-        mins = (total_seconds % 3600) // 60
-        secs = total_seconds % 60
-        duration_text = f"{hours}h {mins}m" if hours > 0 else (f"{mins}m {secs}s" if mins > 0 else f"{secs}s")
-
         return {
             "success": True,
-            "is_departure": True,
-            "message": f"Guest Vehicle '{clean_plate}' was ALREADY inside premises. Processed DEPARTURE (EXIT AUTHORIZED).",
+            "is_departure": False,
+            "is_already_inside": True,
+            "message": f"Guest Vehicle '{clean_plate}' is ALREADY inside premises (Bay: {open_rec.parking_slot or 'Assigned'}).",
             "plate_number": open_rec.plate_number,
             "slot_name": open_rec.parking_slot or "Unassigned",
             "category": getattr(vehicle, "category", "Car") or "Car",
             "owner_name": getattr(vehicle, "owner_name", None) or "Guest",
-            "duration_text": duration_text,
-            "status": "Exit Authorized"
-        }
-
-    # 2.5. Check 60-SECOND POST-EXIT RE-ENTRY COOLDOWN:
-    # If guest vehicle exited within the last 60 seconds, DO NOT create another EntranceRecord or assign a slot!
-    in_exit_cd, exit_cd_rem = check_post_exit_cooldown(db, clean_plate, vehicle.id if vehicle else None, 60)
-    if in_exit_cd:
-        return {
-            "success": True,
-            "is_departure": False,
-            "in_post_exit_cooldown": True,
-            "exit_cooldown_remaining_sec": exit_cd_rem,
-            "message": f"Guest Vehicle recently exited — transit cooldown active ({exit_cd_rem}s remaining). Re-entry locked.",
-            "plate_number": clean_plate,
-            "slot_name": "Re-entry Cooldown",
-            "category": getattr(vehicle, "category", "Car") or "Car",
-            "owner_name": getattr(vehicle, "owner_name", None) or "Guest",
-            "status": "Transit Cooldown"
+            "status": "Already Inside"
         }
 
     assigned_slot = None
@@ -1029,7 +890,7 @@ def process_gate_trigger(
     all_vehicles = db.query(Vehicle).all()
     vehicle = None
     for v in all_vehicles:
-        if v.plate_number and re.sub(r'[\s\-_]', '', v.plate_number.strip().upper()) == clean_no_spaces:
+        if v.plate_number and are_plates_matching(v.plate_number, clean_plate):
             vehicle = v
             break
 
@@ -1040,20 +901,18 @@ def process_gate_trigger(
         # Check if already inside
         open_rec = find_open_entrance_record_by_plate(db, clean_plate)
         if open_rec:
-            entry_ts = open_rec.entrance_time or now
-            sec_inside = max(0, int((now - entry_ts).total_seconds()))
             return {
                 "success": True,
                 "direction": "ENTRY",
-                "action": "IN_TRANSIT",
+                "action": "IGNORED_ALREADY_INSIDE",
                 "is_departure": False,
-                "is_ignored": False,
-                "message": f"Vehicle '{clean_plate}' is currently inside premises (Entered {sec_inside}s ago). Gate active.",
+                "is_ignored": True,
+                "message": f"Vehicle '{clean_plate}' is ALREADY inside premises (Slot: {open_rec.parking_slot or 'Assigned'}). Green line trigger ignored.",
                 "plate_number": clean_plate,
                 "slot_name": open_rec.parking_slot or "Assigned",
-                "category": getattr(vehicle, "category", "Car") or "Car",
+                "category": getattr(vehicle, "category", "Car") if vehicle else "Car",
                 "owner_name": getattr(vehicle, "owner_name", "Registered User") if vehicle else "Guest",
-                "status": "In Transit"
+                "status": "Already Inside"
             }
 
         # If vehicle is registered permanent vehicle
@@ -1140,15 +999,18 @@ def process_gate_trigger(
             open_rec.status = "Approved"
 
             # Close active parking session & free parking slot
-            if vehicle:
-                active_sess = db.query(ParkingSession).filter(
-                    ParkingSession.vehicle_id == vehicle.id,
-                    ParkingSession.status == "Active"
-                ).first()
-                if active_sess:
-                    active_sess.exit_time = now
-                    active_sess.status = "Completed"
-                    slot = db.query(ParkingSlot).filter(ParkingSlot.id == active_sess.slot_id).first()
+            all_active_sess = db.query(ParkingSession).filter(ParkingSession.status == "Active").all()
+            for sess in all_active_sess:
+                matched_session = False
+                if vehicle and sess.vehicle_id == vehicle.id:
+                    matched_session = True
+                elif sess.vehicle and sess.vehicle.plate_number and are_plates_matching(sess.vehicle.plate_number, clean_plate):
+                    matched_session = True
+
+                if matched_session:
+                    sess.exit_time = now
+                    sess.status = "Completed"
+                    slot = db.query(ParkingSlot).filter(ParkingSlot.id == sess.slot_id).first()
                     if slot:
                         slot.status = "Available"
 

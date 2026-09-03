@@ -175,14 +175,6 @@ def assign_slot(data: ParkingAssign, db: Session = Depends(get_db)):
             detail="Vehicle is already parked."
         )
 
-    # 2.5 Check 60-Second Post-Exit Re-Entry Cooldown
-    in_exit_cd, rem_cd = check_post_exit_cooldown(db, vehicle.plate_number, vehicle.id, 60)
-    if in_exit_cd and not getattr(data, "force_override", False):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Re-Entry Cooldown Active: Vehicle '{vehicle.plate_number}' recently exited. Entry is locked for {rem_cd}s."
-        )
-
     # 3. Resolve parking slot
     slot = None
     if data.slot_id is not None:
@@ -289,14 +281,14 @@ def process_vehicle_exit(data: ParkingRelease, db: Session = Depends(get_db)):
             ParkingSession.id == data.session_id,
             ParkingSession.status == "Active"
         ).first()
-    elif data.plate_number is not None:
-        plate = data.plate_number.strip().upper()
-        vehicle = db.query(Vehicle).filter(Vehicle.plate_number == plate).first()
-        if vehicle:
-            session = db.query(ParkingSession).filter(
-                ParkingSession.vehicle_id == vehicle.id,
-                ParkingSession.status == "Active"
-            ).first()
+
+    if not session and data.plate_number:
+        from routes.entrance import are_plates_matching
+        all_active = db.query(ParkingSession).filter(ParkingSession.status == "Active").all()
+        for s in all_active:
+            if s.vehicle and s.vehicle.plate_number and are_plates_matching(s.vehicle.plate_number, data.plate_number):
+                session = s
+                break
 
     if not session:
         # Fallback check for vehicles inside premises with open EntranceRecord (e.g. No Slot Available or auto-assigned)
@@ -320,14 +312,6 @@ def process_vehicle_exit(data: ParkingRelease, db: Session = Depends(get_db)):
 
             total_seconds = max(0, int((now - entry_time).total_seconds()))
 
-            # Backend 60-second transit buffer enforcement
-            if total_seconds < 60 and not getattr(data, "force_override", False):
-                rem_sec = max(0, 60 - total_seconds)
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Gate Transit Protection: Vehicle '{entrance_rec.plate_number}' entered {total_seconds}s ago. Exit is locked for {rem_sec}s while vehicle passes the gate."
-                )
-
             exit_time = get_utc_now()
             entrance_rec.exit_time = exit_time
 
@@ -335,8 +319,18 @@ def process_vehicle_exit(data: ParkingRelease, db: Session = Depends(get_db)):
             if entrance_rec.vehicle_id:
                 vehicle = db.query(Vehicle).filter(Vehicle.id == entrance_rec.vehicle_id).first()
             if not vehicle and data.plate_number:
-                clean_p = data.plate_number.strip().upper()
-                vehicle = db.query(Vehicle).filter(func.upper(Vehicle.plate_number) == clean_p).first()
+                from routes.entrance import are_plates_matching
+                all_v = db.query(Vehicle).all()
+                for v in all_v:
+                    if v.plate_number and are_plates_matching(v.plate_number, data.plate_number):
+                        vehicle = v
+                        break
+
+            # Free slot if occupied
+            if entrance_rec.parking_slot:
+                slot_obj = db.query(ParkingSlot).filter(ParkingSlot.slot_name == entrance_rec.parking_slot).first()
+                if slot_obj:
+                    slot_obj.status = "Available"
 
             db.commit()
             record_vehicle_exit_timestamp(entrance_rec.plate_number)
@@ -381,14 +375,6 @@ def process_vehicle_exit(data: ParkingRelease, db: Session = Depends(get_db)):
         entry_time = entry_time.replace(tzinfo=now.tzinfo)
 
     total_seconds = max(0, int((now - entry_time).total_seconds()))
-
-    # Backend 60-second transit buffer enforcement
-    if total_seconds < 60 and not getattr(data, "force_override", False):
-        rem_sec = max(0, 60 - total_seconds)
-        raise HTTPException(
-            status_code=400,
-            detail=f"Gate Transit Protection: Vehicle entered {total_seconds}s ago. Exit is locked for {rem_sec}s while vehicle passes the gate."
-        )
 
     vehicle = db.query(Vehicle).filter(Vehicle.id == session.vehicle_id).first()
     slot = db.query(ParkingSlot).filter(ParkingSlot.id == session.slot_id).first()

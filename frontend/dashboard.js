@@ -1037,6 +1037,22 @@ function initWebSocket() {
                         if (typeof loadAlerts === "function") loadAlerts();
                     }
 
+                    if (data.action_type === "exit" || data.is_departure === true) {
+                        const resultEl = document.getElementById("smartGateResult");
+                        if (resultEl && data.plate_number) {
+                            resultEl.style.display = "block";
+                            resultEl.innerHTML = `
+                                <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 14px; font-size: 13px;">
+                                    <div style="font-weight: 800; color: #b91c1c; font-size: 15px; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+                                        <span>🔴 RED LINE: VEHICLE DEPARTED (EXIT AUTHORIZED)</span>
+                                        <span style="font-size: 11px; background: #ef4444; color: white; padding: 3px 10px; border-radius: 10px;">BARRIER OPENED</span>
+                                    </div>
+                                    <div style="margin-top: 6px;">Plate: <strong class="plate-tag" style="margin: 0; padding: 2px 8px;">${data.plate_number}</strong> | Bay Released: <strong style="color: #059669;">${data.parking_slot || 'Freed'}</strong> | Status: <strong>Departed Premises</strong></div>
+                                </div>
+                            `;
+                        }
+                    }
+
                     // Reload active tab data in real-time
                     const activeMenu = document.querySelector(".menu-item.active");
                     if (activeMenu) {
@@ -2570,6 +2586,75 @@ let scanWatchdogTimer = null;
 let currentCameraSessionId = 0;
 let lastLiveScannedPlate = "";
 let lastLiveScanTimestamp = 0;
+let approvedPlatesInTransit = {}; // { clean_plate: { status: 'INSIDE', slot: 'P1', timestamp: ... } }
+
+function getPlateVariants(plate) {
+    if (!plate) return new Set();
+    const clean = String(plate).replace(/[\s\-_]/g, '').toUpperCase();
+    if (!clean || clean === 'UNKNOWN' || clean === 'NOPLATE') return new Set();
+    
+    const variants = new Set([clean]);
+    const provinces = ['WP', 'CP', 'SP', 'SG', 'NC', 'NW', 'EP', 'UP', 'NP', 'SB'];
+    for (const prov of provinces) {
+        if (clean.startsWith(prov) && clean.length > prov.length + 3) {
+            variants.add(clean.slice(prov.length));
+        }
+    }
+    const singleProv = ['W', 'C', 'S', 'G', 'N', 'E', 'U', 'P'];
+    if (clean.length >= 6 && singleProv.includes(clean[0])) {
+        variants.add(clean.slice(1));
+    }
+    return variants;
+}
+
+function arePlatesMatching(p1, p2) {
+    if (!p1 || !p2) return false;
+    const v1 = getPlateVariants(p1);
+    const v2 = getPlateVariants(p2);
+    for (const v of v1) {
+        if (v2.has(v)) return true;
+    }
+    return false;
+}
+
+function isPlateInTransitInside(plate) {
+    if (!plate) return false;
+    const v = getPlateVariants(plate);
+    for (const key of Object.keys(approvedPlatesInTransit)) {
+        const kv = getPlateVariants(key);
+        for (const k of kv) {
+            if (v.has(k)) return true;
+        }
+    }
+    return false;
+}
+
+function getTransitSlot(plate) {
+    if (!plate) return null;
+    const v = getPlateVariants(plate);
+    for (const [key, val] of Object.entries(approvedPlatesInTransit)) {
+        const kv = getPlateVariants(key);
+        for (const k of kv) {
+            if (v.has(k)) return val.slot;
+        }
+    }
+    return null;
+}
+
+function removeFromTransit(plate) {
+    if (!plate) return;
+    const v = getPlateVariants(plate);
+    for (const key of Object.keys(approvedPlatesInTransit)) {
+        const kv = getPlateVariants(key);
+        for (const k of kv) {
+            if (v.has(k)) {
+                delete approvedPlatesInTransit[key];
+                break;
+            }
+        }
+    }
+}
+
 let autoScanPlateBuffer = {
     plate: "",
     count: 0,
@@ -2616,7 +2701,6 @@ function startLiveOverlayLoop() {
                 renderGateLinesOnLiveStream(overlayCanvas, video);
             }
 
-            // 2. Draw recent bounding box if active (within last 1500ms)
             // 2. Draw recent bounding box if active (within last 1500ms)
             if (activeDetectionBboxData && (Date.now() - activeDetectionBboxData.timestamp < 1500)) {
                 drawBboxOnly(
@@ -2694,11 +2778,11 @@ function drawBboxOnly(ctx, bbox, plateText, confidence, status, vehicleBbox, veh
         return;
     }
 
-    const boxColor = status === "Allowed" ? "#10b981" : "#22c55e"; // bright green
+    const boxColor = status === "Allowed" ? "#10b981" : (status === "Flagged" ? "#ef4444" : "#f59e0b");
     const boxW = x2 - x1;
     const boxH = y2 - y1;
 
-    // Glowing green bounding box
+    // Glowing bounding box
     ctx.strokeStyle = boxColor;
     ctx.lineWidth = 3.5;
     ctx.strokeRect(x1, y1, boxW, boxH);
@@ -2714,8 +2798,8 @@ function drawBboxOnly(ctx, bbox, plateText, confidence, status, vehicleBbox, veh
     ctx.stroke();
 
     // Top Plate Label Banner
-    const labelText = `🟩 ${plateText} (${confidence}%)`;
-    ctx.font = "bold 15px Inter, sans-serif";
+    const labelText = confidence > 0 ? `${plateText} (${confidence}%)` : plateText;
+    ctx.font = "bold 14px Inter, sans-serif";
     const textWidth = ctx.measureText(labelText).width;
 
     ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
@@ -2758,29 +2842,81 @@ function stopAutoLiveScanLoop() {
     clearDetectionOverlay();
 }
 
-function calculatePlateGateTriggerLine(bbox, videoWidth, videoHeight) {
-
-    if (!bbox || !Array.isArray(bbox) || bbox.length < 4 || !gateColliderConfig) {
-        return "GREEN";
+function calculatePlateGateTriggerLine(bbox, videoWidth, videoHeight, vehicleBbox = null) {
+    if (((!bbox || !Array.isArray(bbox) || bbox.length < 4) && (!vehicleBbox || !Array.isArray(vehicleBbox) || vehicleBbox.length < 4)) || !gateColliderConfig) {
+        return "INSIDE_DRIVEWAY";
     }
 
-    const [x1, y1, x2, y2] = bbox;
-    const centerX = (x1 + x2) / 2;
-    const centerY = (y1 + y2) / 2;
+    const vw = videoWidth || 640;
+    const vh = videoHeight || 380;
+    const scaleX = 640 / vw;
+    const scaleY = 380 / vh;
 
-    const normX = (centerX / (videoWidth || 640)) * 640;
-    const normY = (centerY / (videoHeight || 380)) * 380;
+    // Prioritize vehicle_bbox (full vehicle body), fallback to plate bbox
+    const primaryBox = (vehicleBbox && Array.isArray(vehicleBbox) && vehicleBbox.length >= 4) ? vehicleBbox : bbox;
+    const [bx1, by1, bx2, by2] = primaryBox;
 
-    const pinA = gateColliderConfig.pin_a || { y: 140 };
-    const pinB = gateColliderConfig.pin_b || { y: 140 };
-    const pinC = gateColliderConfig.pin_c || { y: 340 };
-    const pinD = gateColliderConfig.pin_d || { y: 340 };
+    const normX1 = bx1 * scaleX;
+    const normX2 = bx2 * scaleX;
+    const normY1 = by1 * scaleY;
+    const normY2 = by2 * scaleY;
+    const normCenterX = (normX1 + normX2) / 2;
 
-    const redY = (pinA.y + pinB.y) / 2;
-    const greenY = (pinC.y + pinD.y) / 2;
-    const midY = (redY + greenY) / 2;
+    const pinA = gateColliderConfig.pin_a || { x: 80, y: 140 };
+    const pinB = gateColliderConfig.pin_b || { x: 560, y: 140 };
+    const pinC = gateColliderConfig.pin_c || { x: 80, y: 340 };
+    const pinD = gateColliderConfig.pin_d || { x: 560, y: 340 };
 
-    return normY < midY ? "RED" : "GREEN";
+    // Red Line (Outer Gate / Public Road Boundary)
+    let redY = (pinA.y + pinB.y) / 2;
+    if (pinB.x !== pinA.x) {
+        const slope = (pinB.y - pinA.y) / (pinB.x - pinA.x);
+        const yAtX = pinA.y + slope * (normCenterX - pinA.x);
+        if (!isNaN(yAtX)) redY = yAtX;
+    }
+
+    // Green Line (Driveway / Scanning Initiation Line)
+    let greenY = (pinC.y + pinD.y) / 2;
+    if (pinD.x !== pinC.x) {
+        const slope = (pinD.y - pinC.y) / (pinD.x - pinC.x);
+        const yAtX = pinC.y + slope * (normCenterX - pinC.x);
+        if (!isNaN(yAtX)) greenY = yAtX;
+    }
+
+    // 1. Red Line Check (Outer Gate / Departure Boundary)
+    if (normY1 <= redY + 25) {
+        return "RED";
+    }
+
+    // 2. Green Line Touch Check:
+    // Scanning starts when the vehicle touches the green line (bounding box crosses/intersects segment C -> D)
+    const minGreenX = Math.min(pinC.x, pinD.x) - 20;
+    const maxGreenX = Math.max(pinC.x, pinD.x) + 20;
+    const hasXOverlap = (normX2 >= minGreenX) && (normX1 <= maxGreenX);
+
+    // Box vertical bounds enclose or touch the green line (tolerance 20px)
+    const touchTolerance = 20;
+    const isTouchingGreenLine = hasXOverlap && ((normY1 - touchTolerance) <= greenY && (normY2 + touchTolerance) >= greenY);
+
+    // Also check plate bbox touch if vehicleBbox was used and distinct plate bbox exists
+    let isPlateTouchingGreen = false;
+    if (!isTouchingGreenLine && bbox && Array.isArray(bbox) && bbox.length >= 4) {
+        const [px1, py1, px2, py2] = bbox;
+        const pNormX1 = px1 * scaleX, pNormX2 = px2 * scaleX;
+        const pNormY1 = py1 * scaleY, pNormY2 = py2 * scaleY;
+        const pHasX = (pNormX2 >= minGreenX) && (pNormX1 <= maxGreenX);
+        if (pHasX && ((pNormY1 - 25) <= greenY && (pNormY2 + 25) >= greenY)) {
+            isPlateTouchingGreen = true;
+        }
+    }
+
+    if (isTouchingGreenLine || isPlateTouchingGreen) {
+        window._lastGreenLineTouchTime = Date.now();
+        window._isGreenLineTouched = true;
+        return "GREEN";
+    } else {
+        return "INSIDE_DRIVEWAY";
+    }
 }
 
 function scheduleNextAutoScan(delay = 100) {
@@ -2791,11 +2927,13 @@ function scheduleNextAutoScan(delay = 100) {
     }
     autoLiveScanTimeout = setTimeout(() => {
         const confirmModal = document.getElementById("detectionConfirmModal");
-        const isModalOpen = confirmModal && (confirmModal.style.display === "flex" || confirmModal.style.display === "block");
+        const guestModal = document.getElementById("guestAuthModal");
+        const isModalOpen = (confirmModal && (confirmModal.style.display === "flex" || confirmModal.style.display === "block"))
+                         || (guestModal && (guestModal.style.display === "flex" || guestModal.style.display === "block"));
         if (webcamStream && isAutoLiveScanEnabled && !isScanInProgress && !isModalOpen) {
             scanCurrentFrame(true);
         } else if (isAutoLiveScanEnabled && webcamStream) {
-            scheduleNextAutoScan(200);
+            scheduleNextAutoScan(250);
         }
     }, delay);
 }
@@ -2994,7 +3132,7 @@ async function scanCurrentFrame(isAutoScan = false) {
             }
 
             const currentVerifMode = getVerificationMode();
-            const response = await fetch(`${API_URL}/detection/upload?process_ai=true&verification_mode=${encodeURIComponent(currentVerifMode)}`, {
+            const response = await fetch(`${API_URL}/detection/upload?process_ai=true&verification_mode=${encodeURIComponent(currentVerifMode)}&force_ocr=${!isAutoScan}`, {
                 method: "POST",
                 headers: { "Authorization": "Bearer " + token },
                 body: formData,
@@ -3014,6 +3152,22 @@ async function scanCurrentFrame(isAutoScan = false) {
             // Guard against results parsed after session changed
             if (currentCameraSessionId !== thisSessionId || !webcamStream) {
                 console.log("Discarding scan result from inactive/previous camera session.");
+                return;
+            }
+
+            // Virtual Tripwire Spatial Gating: OCR is dormant while vehicle approaches in driveway
+            if (data.ocr_asleep && data.bbox) {
+                const trackBadge = data.track_id ? `[Track #${data.track_id}] ` : "";
+                const overlayLabel = `💤 ${trackBadge}[APPROACHING GREEN LINE - OCR DORMANT]`;
+                drawDetectionOverlay(
+                    data.bbox,
+                    overlayLabel,
+                    0,
+                    "Pending",
+                    data.vehicle_bbox,
+                    data.vehicle_type || "Vehicle",
+                    data.track_id || 1
+                );
                 return;
             }
             
@@ -3062,28 +3216,46 @@ async function scanCurrentFrame(isAutoScan = false) {
                 const isConfirmedResult = data.is_confirmed !== false;
                 const consensusState = data.consensus_state || (isConfirmedResult ? 'confirmed' : 'voting');
                 
-                // Determine Gate Collision Zone (Red Outer Line vs Green Inner Line)
-                const triggerGateLine = calculatePlateGateTriggerLine(data.bbox, video.videoWidth, video.videoHeight);
-                const isParked = Boolean(data.is_parked === true);
-                const isStreetTraffic = (triggerGateLine === "RED" && !isParked) || Boolean(data.is_ignored === true);
+                // Determine Gate Collision Zone (Red Outer Line vs Green Inner Line vs Inside Driveway)
+                const triggerGateLine = calculatePlateGateTriggerLine(data.bbox, video.videoWidth, video.videoHeight, data.vehicle_bbox);
+                const isDeparture = Boolean(data.is_departure === true || data.action_type === "exit");
+                const isAlreadyInside = Boolean(data.action_type === "already_inside_ignored");
+                const isInTransitInside = isPlateInTransitInside(displayPlate) || isPlateInTransitInside(rawPlateClean) || isPlateInTransitInside(data.recognized_plate) || isPlateInTransitInside(data.plate_number);
+                const isParked = Boolean(data.is_parked === true || isAlreadyInside || isInTransitInside);
+                const isStreetTraffic = Boolean(triggerGateLine === "RED" && !isParked);
+                const currentSlot = data.parking_slot || getTransitSlot(displayPlate) || getTransitSlot(rawPlateClean) || getTransitSlot(data.recognized_plate) || null;
 
-                let lineTag = triggerGateLine === "GREEN" ? "🟢 Green Line" : "🔴 Red Line";
+                let lineTag = triggerGateLine === "GREEN" ? "🟢 Green Line" : (triggerGateLine === "RED" ? "🔴 Red Line" : "🚗 In Premises");
+                if (isDeparture) lineTag = "🔴 Red Line (Auto-Exit)";
                 const trackBadge = data.track_id ? `[Track #${data.track_id}] ` : "";
-                const overlayLabel = isStreetTraffic 
-                    ? `🛡️ ${trackBadge}[STREET TRAFFIC] ${displayPlate}`
-                    : (!isConfirmedResult ? `${trackBadge}[Voting ${data.agreeing_frames || 1}/${data.voting_frames || 2}] ${displayPlate}` : `${trackBadge}${lineTag} | ${displayPlate}`);
+                
+                let overlayLabel = "";
+                if (isStreetTraffic) {
+                    overlayLabel = `🛡️ ${trackBadge}[STREET TRAFFIC] ${displayPlate}`;
+                } else if (isDeparture) {
+                    overlayLabel = `🔴 ${trackBadge}[EXIT AUTHORIZED] ${displayPlate} | Bay Freed`;
+                } else if (isParked) {
+                    overlayLabel = `🟢 ${trackBadge}[APPROVED] ${displayPlate} (Bay: ${currentSlot || 'Assigned'}) | Scan Paused until Red Line`;
+                } else if (triggerGateLine !== "GREEN") {
+                    overlayLabel = `🚗 ${trackBadge}[APPROACHING GREEN LINE] ${displayPlate}`;
+                } else if (!isRegistered) {
+                    overlayLabel = `🛑 ${trackBadge}[UNREGISTERED - TOUCH DETECTED] ${displayPlate}`;
+                } else if (!isConfirmedResult) {
+                    overlayLabel = `${trackBadge}[Voting ${data.agreeing_frames || 1}/${data.voting_frames || 2}] ${displayPlate}`;
+                } else {
+                    overlayLabel = `${trackBadge}🟢 Green Line Touch | ${displayPlate}`;
+                }
 
                 // Real YOLO BBox overlay displayed immediately with 2-Stage Vehicle + ByteTrack & line indicator
                 drawDetectionOverlay(
                     data.bbox,
                     overlayLabel,
                     confidence,
-                    isStreetTraffic ? "Pending" : status,
+                    isStreetTraffic ? "Pending" : (isDeparture ? "Allowed" : (isParked ? "Allowed" : status)),
                     data.vehicle_bbox,
                     data.vehicle_type,
                     data.track_id
                 );
-
 
                 // Auto populate manual check input if empty or updated
                 const manualInput = document.querySelector('input[placeholder*="ENTER OR SCAN LICENSE PLATE"]');
@@ -3092,16 +3264,17 @@ async function scanCurrentFrame(isAutoScan = false) {
                 }
 
                 const isDuplicate = Boolean(data.is_duplicate === true);
-                const inTransitBuffer = Boolean(data.in_transit_buffer === true);
-                const inExitCooldown = Boolean(data.in_exit_cooldown === true || data.action_type === "exit_cooldown");
-                const exitCdRem = data.exit_cooldown_remaining_sec || 0;
                 const mode = getVerificationMode();
 
                 let logStatusText = status;
                 let logBadgeClass = badgeClass;
                 let logBorderColor = borderColor;
 
-                if (isStreetTraffic) {
+                if (isDeparture) {
+                    logStatusText = "Exit Authorized";
+                    logBadgeClass = "allowed";
+                    logBorderColor = "#dc2626";
+                } else if (isStreetTraffic) {
                     logStatusText = "🛡️ Ignored (Street Traffic)";
                     logBadgeClass = "pending";
                     logBorderColor = "#64748b";
@@ -3109,12 +3282,12 @@ async function scanCurrentFrame(isAutoScan = false) {
                     logStatusText = `Voting (${data.agreeing_frames || 1}/${data.voting_frames || 2})`;
                     logBadgeClass = "pending";
                     logBorderColor = "#3b82f6";
-                } else if (inExitCooldown) {
-                    logStatusText = "Transit Cooldown";
-                    logBadgeClass = "pending";
-                    logBorderColor = "#f59e0b";
+                } else if (isParked && triggerGateLine === "GREEN") {
+                    logStatusText = "Approved (In Premises)";
+                    logBadgeClass = "allowed";
+                    logBorderColor = "#10b981";
                 } else if (!isRegistered && !isParked) {
-                    logStatusText = "Pending Verification";
+                    logStatusText = "Pending Officer Approval";
                     logBadgeClass = "pending";
                     logBorderColor = "#f59e0b";
                 } else if (mode === "strict") {
@@ -3122,7 +3295,7 @@ async function scanCurrentFrame(isAutoScan = false) {
                     logBadgeClass = "pending";
                     logBorderColor = "#f59e0b";
                 } else if (mode === "smart") {
-                    if (isParked && confidence >= 85 && !inTransitBuffer) {
+                    if (isParked && confidence >= 85) {
                         logStatusText = "Auto-Exited";
                         logBadgeClass = "flagged";
                         logBorderColor = "#ef4444";
@@ -3142,9 +3315,16 @@ async function scanCurrentFrame(isAutoScan = false) {
                 }
                 autoScanPlateBuffer.lastDetectedTime = now;
 
-                const hasConsensus = isConfirmedResult && (!isAutoScan || isRegistered || autoScanPlateBuffer.count >= 2);
+                const hasConsensus = isConfirmedResult && (!isAutoScan || isRegistered || autoScanPlateBuffer.count >= 1);
+                const isLineChanged = (lastLiveScannedPlate === displayPlate && window._lastGateLine !== triggerGateLine);
+                window._lastGateLine = triggerGateLine;
 
-                if (!isDuplicate && isConfirmedResult) {
+                // Only log if not a repetitive scan of already approved vehicle past green line
+                const shouldLogEntry = (!isDuplicate || isLineChanged || isDeparture || data.action_type === "entrance" || data.action_type === "exit") 
+                    && isConfirmedResult 
+                    && !(triggerGateLine === "GREEN" && isParked && lastLiveScannedPlate === displayPlate && !isLineChanged);
+
+                if (shouldLogEntry) {
                     lastLiveScannedPlate = displayPlate;
                     lastLiveScanTimestamp = Date.now();
 
@@ -3160,10 +3340,27 @@ async function scanCurrentFrame(isAutoScan = false) {
                                         <span style="font-size: 11px; font-weight: 800; color: #dc2626;">🔴 RED LINE (OUTER GATE)</span>
                                     </div>
                                     <div style="color: #64748b; font-size: 11px; margin-top: 4px;">Time: ${timestamp} | Cam-01 Gate | Public Street Traffic Filtered</div>
-                                    <div style="font-size: 12px; margin-top: 4px; color: #475569;">🛡️ <b>Public Road Traffic Filtered</b>: Vehicle is passing on public street outside premises. No database entrance records created.</div>
+                                    <div style="font-size: 12px; margin-top: 4px; color: #475569;">🛡️ <b>Public Road Traffic Filtered</b>: Vehicle is outside on public street. Red line only exits vehicles.</div>
                                 </div>
                                 <span class="status-badge" style="background: #e2e8f0; color: #475569;">
                                     🛡️ Ignored
+                                </span>
+                            </div>
+                        ` + logBody.innerHTML;
+                    } else if (isDeparture) {
+                        logBody.innerHTML = `
+                            <div class="log-entry" style="border-left: 4px solid #dc2626; padding-left: 10px; margin-bottom: 8px; background: rgba(239, 68, 68, 0.04);">
+                                <div>
+                                    <div style="font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 6px;">
+                                        <span class="plate-tag" style="padding: 2px 6px; font-size: 12px;">${displayPlate}</span>
+                                        ${trackPill}
+                                        <span style="font-size: 11px; font-weight: 800; color: #dc2626;">🔴 RED LINE AUTO-EXIT</span>
+                                    </div>
+                                    <div style="color: var(--text-muted); font-size: 11px; margin-top: 4px;">Time: ${timestamp} | Cam-01 Exit Gate | Bay Freed: <b>${currentSlot || 'Freed'}</b></div>
+                                    <div style="font-size: 12px; margin-top: 4px; color: #b91c1c;">🔴 <b>Automatic Exit Completed</b>: Vehicle reached Red Line boundary. Exit authorized and parking slot released.</div>
+                                </div>
+                                <span class="status-badge allowed">
+                                    Exit Authorized
                                 </span>
                             </div>
                         ` + logBody.innerHTML;
@@ -3175,7 +3372,7 @@ async function scanCurrentFrame(isAutoScan = false) {
                                         <span class="plate-tag" style="padding: 2px 6px; font-size: 12px;">${displayPlate}</span>
                                         <span style="font-size: 10px; background: rgba(0,0,0,0.06); padding: 2px 5px; border-radius: 4px;">${category}</span>
                                         ${trackPill}
-                                        <span style="font-size: 11px; font-weight: 800; color: ${triggerGateLine === 'GREEN' ? '#16a34a' : '#dc2626'};">${triggerGateLine === 'GREEN' ? '🟢 GREEN (DRIVEWAY)' : '🔴 RED (OUTER GATE)'}</span>
+                                        <span style="font-size: 11px; font-weight: 800; color: ${triggerGateLine === 'GREEN' ? '#16a34a' : (triggerGateLine === 'RED' ? '#dc2626' : '#64748b')};">${triggerGateLine === 'GREEN' ? '🟢 GREEN LINE' : (triggerGateLine === 'RED' ? '🔴 RED LINE' : '🚗 APPROACHING')}</span>
                                     </div>
                                     <div style="color: var(--text-muted); font-size: 11px; margin-top: 4px;">Time: ${timestamp} | Cam-01 Gate | Conf: ${confidence}% (${mode.toUpperCase()})</div>
                                     <div style="font-size: 12px; margin-top: 4px;">Owner: <b>${owner}</b>${parkingInfo}</div>
@@ -3187,6 +3384,11 @@ async function scanCurrentFrame(isAutoScan = false) {
                         ` + logBody.innerHTML;
                     }
 
+                    // Reload dashboard data on entrance or exit state changes
+                    if (data.action_type === "entrance" || data.action_type === "exit" || isDeparture) {
+                        if (typeof loadDashboardData === "function") loadDashboardData();
+                        if (typeof loadAdminParkingSlots === "function") loadAdminParkingSlots();
+                    }
 
                     if (status === "Flagged" && mode !== "strict" && hasConsensus && !isStreetTraffic) {
                         triggerSecuritySiren();
@@ -3196,57 +3398,76 @@ async function scanCurrentFrame(isAutoScan = false) {
                     }
                 }
 
+                // If vehicle was automatically exited at red line, remove from active in-transit registry and update smartGateResult
+                if (isDeparture) {
+                    removeFromTransit(displayPlate);
+                    removeFromTransit(rawPlateClean);
+                    removeFromTransit(data.recognized_plate);
+
+                    const resultEl = document.getElementById("smartGateResult");
+                    if (resultEl) {
+                        resultEl.style.display = "block";
+                        resultEl.innerHTML = `
+                            <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 14px; font-size: 13px;">
+                                <div style="font-weight: 800; color: #b91c1c; font-size: 15px; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+                                    <span>🔴 RED LINE: VEHICLE DEPARTED (EXIT AUTHORIZED)</span>
+                                    <span style="font-size: 11px; background: #ef4444; color: white; padding: 3px 10px; border-radius: 10px;">BARRIER OPENED</span>
+                                </div>
+                                <div style="margin-top: 6px;">Plate: <strong class="plate-tag" style="margin: 0; padding: 2px 8px;">${displayPlate}</strong> | Bay Released: <strong style="color: #059669;">${currentSlot || data.parking_slot || 'Freed'}</strong> | Status: <strong>Departed Premises</strong></div>
+                            </div>
+                        `;
+                    }
+                }
+
+                // If registered vehicle was automatically admitted, register in active in-transit registry
+                if (isRegistered && data.action_type === "entrance" && data.parking_slot) {
+                    const cleanReg = String(displayPlate || rawPlateClean).replace(/[\s\-_]/g, '').toUpperCase();
+                    approvedPlatesInTransit[cleanReg] = {
+                        status: 'INSIDE',
+                        slot: data.parking_slot,
+                        approvedAt: Date.now()
+                    };
+                }
+
                 const confirmModal = document.getElementById("detectionConfirmModal");
                 const isModalAlreadyOpen = confirmModal && (confirmModal.style.display === "flex" || confirmModal.style.display === "block");
 
                 // Verification check for Live Scan & Manual Frame Capture:
                 let shouldPromptVerification = false;
-                if (!isModalAlreadyOpen && !isStreetTraffic) {
+                if (!isModalAlreadyOpen && !isStreetTraffic && isConfirmedResult && !isDeparture) {
                     if (isParked) {
-                        // Vehicle already on premises: ONLY process exit if 60s transit buffer has expired
-                        if (!inTransitBuffer) {
-                            if (mode === "strict") {
-                                // Strict Mode: ALWAYS prompt departure confirmation modal for guard review
-                                shouldPromptVerification = true;
-                            } else if (mode === "smart") {
-                                // Smart Mode: Low confidence (< 85%) prompts confirmation modal; High confidence (>= 85%) triggers Auto-Exit
-                                if (confidence < 85) {
-                                    shouldPromptVerification = true;
-                                } else {
-                                    const nowTs = Date.now();
-                                    if (nowTs - lastAutoExitTimestamp > 3000 || lastAutoExitPlate !== displayPlate) {
-                                        lastAutoExitTimestamp = nowTs;
-                                        lastAutoExitPlate = displayPlate;
-                                        console.log(`[Smart ANPR] Auto-authorizing departure for ${displayPlate} (Confidence: ${confidence}%).`);
-                                        await processDepartureGateManual(displayPlate);
-                                    }
-                                }
-                            } else if (mode === "auto") {
-                                // Full Auto Mode: ALWAYS auto-exit without popups
-                                const nowTs = Date.now();
-                                if (nowTs - lastAutoExitTimestamp > 3000 || lastAutoExitPlate !== displayPlate) {
-                                    lastAutoExitTimestamp = nowTs;
-                                    lastAutoExitPlate = displayPlate;
-                                    console.log(`[Auto ANPR] Auto-authorizing departure for ${displayPlate}.`);
-                                    await processDepartureGateManual(displayPlate);
-                                }
+                        // Vehicle already on premises:
+                        if (triggerGateLine === "RED") {
+                            // Reached Red Line -> AUTOMATIC EXIT!
+                            const nowTs = Date.now();
+                            if (nowTs - lastAutoExitTimestamp > 2500 || !arePlatesMatching(lastAutoExitPlate, displayPlate)) {
+                                lastAutoExitTimestamp = nowTs;
+                                lastAutoExitPlate = displayPlate;
+                                console.log(`[ANPR] Red Line reached: Automatic exit authorized for ${displayPlate}.`);
+                                removeFromTransit(displayPlate);
+                                removeFromTransit(rawPlateClean);
+                                await processDepartureGateManual(displayPlate);
                             }
+                        } else {
+                            // In Driveway / Green Line: Scanning is paused for this approved vehicle!
+                            shouldPromptVerification = false;
                         }
-                    } else {
-                        // Arriving vehicle (Green line trigger):
-                        if (inExitCooldown) {
-                            // Vehicle in post-exit cooldown (< 60s since exit) -> DO NOT auto-admit or prompt entrance
+                    } else if (triggerGateLine === "GREEN") {
+                        // Arriving vehicle touching Green Line: Scanning & Admission starts!
+                        if (mode === "auto") {
+                            // Full Auto Mode: All vehicles pass automatically without ANY popup modal!
                             shouldPromptVerification = false;
                         } else if (mode === "strict") {
-                            // Strict Mode: ALWAYS prompt entrance verification modal for every arriving vehicle
                             shouldPromptVerification = true;
-                        } else if (mode === "smart") {
-                            // Smart Mode: Prompts for unregistered or low confidence (< 85%)
-                            shouldPromptVerification = (!isRegistered || confidence < 85);
-                        } else if (mode === "auto") {
-                            // Full Auto Mode: Only prompt for unregistered / guest pass
-                            shouldPromptVerification = !isRegistered;
+                        } else if (!isRegistered) {
+                            // Unregistered vehicle in Smart / Manual mode -> Ask for Security Officer approval!
+                            shouldPromptVerification = true;
+                        } else if (mode === "smart" && confidence < 75) {
+                            shouldPromptVerification = true;
                         }
+                    } else {
+                        // Vehicle approaching in driveway, has not touched Green Line yet
+                        shouldPromptVerification = false;
                     }
                 }
 
@@ -3261,11 +3482,7 @@ async function scanCurrentFrame(isAutoScan = false) {
                         is_registered: isRegistered,
                         owner_name: owner,
                         is_parked: isParked,
-                        in_transit_buffer: inTransitBuffer,
-                        in_exit_cooldown: inExitCooldown,
-                        exit_cooldown_remaining_sec: exitCdRem,
-                        stay_seconds: data.stay_seconds !== undefined ? data.stay_seconds : (inTransitBuffer ? 0 : 999),
-                        transit_remaining_sec: data.transit_remaining_sec || 0,
+                        stay_seconds: data.stay_seconds !== undefined ? data.stay_seconds : 0,
                         parking_slot: data.parking_slot || null
                     });
                 }
@@ -6021,22 +6238,12 @@ async function processArrivalGateManual(targetPlate, bypassVerification = false)
             const cat = (data.category || (data.vehicle && data.vehicle.category) || 'Car').toUpperCase();
             const icon = cat === 'BIKE' ? '🏍️' : cat === 'VAN' ? '🚐' : cat === 'BUS' ? '🚌' : cat === 'TRUCK' ? '🚚' : (cat === 'TUK TUK' || cat === 'TUKTUK' || cat === 'THREE WHEELER') ? '🛺' : '🚗';
 
-            if (data.in_post_exit_cooldown) {
-                if (resultEl) {
-                    resultEl.innerHTML = `
-                        <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; padding: 14px; font-size: 13px;">
-                            <div style="font-weight: 800; color: #b45309; font-size: 15px; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
-                                <span>⏳ POST-EXIT TRANSIT COOLDOWN ACTIVE</span>
-                                <span style="font-size: 11px; background: #f59e0b; color: white; padding: 3px 10px; border-radius: 10px;">ENTRY LOCKED</span>
-                            </div>
-                            <div style="color: #92400e; font-size: 13px; margin-top: 6px;">
-                                Vehicle <strong>${returnedPlate}</strong> recently exited. Re-entry is locked for <strong>${data.exit_cooldown_remaining_sec || 60}s</strong> while the vehicle departs the gate.
-                            </div>
-                        </div>
-                    `;
-                }
-                return;
-            }
+            const cleanTarget = String(returnedPlate || plate).replace(/[\s\-_]/g, '').toUpperCase();
+            approvedPlatesInTransit[cleanTarget] = {
+                status: 'INSIDE',
+                slot: slotName,
+                approvedAt: Date.now()
+            };
 
             if (resultEl) {
                 resultEl.innerHTML = `
@@ -6136,12 +6343,7 @@ function closeGuestAuthModal() {
     if (modal) modal.style.display = "none";
 }
 
-async function approveGuestVehicleEntry() {
-    const plate = document.getElementById("guestModalPlateHidden")?.value;
-    const ownerName = document.getElementById("guestOwnerName")?.value || "Visitor / Guest";
-    const category = document.getElementById("guestCategory")?.value || "Car";
-    const purpose = document.getElementById("guestPurpose")?.value || "Visitor Access";
-
+async function authorizeGuestEntryDirect(plate, ownerName = "Visitor / Guest", category = "Car", purpose = "Visitor Access", snapshot = null) {
     if (!plate) return;
 
     closeGuestAuthModal();
@@ -6161,13 +6363,29 @@ async function approveGuestVehicleEntry() {
                 owner_name: ownerName,
                 category: category,
                 purpose: purpose,
-                snapshot: currentGuestSnapshot
+                snapshot: snapshot || currentGuestSnapshot
             })
         });
 
         const data = await response.json();
 
         if (response.ok) {
+            const returnedPlate = data.plate_number || plate;
+            const slotName = data.slot_name || 'Assigned';
+
+            const cleanTarget = String(returnedPlate).replace(/[\s\-_]/g, '').toUpperCase();
+            approvedPlatesInTransit[cleanTarget] = {
+                status: 'INSIDE',
+                slot: slotName,
+                approvedAt: Date.now()
+            };
+            const inputClean = String(plate).replace(/[\s\-_]/g, '').toUpperCase();
+            approvedPlatesInTransit[inputClean] = {
+                status: 'INSIDE',
+                slot: slotName,
+                approvedAt: Date.now()
+            };
+
             if (resultEl) {
                 resultEl.innerHTML = `
                     <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 14px; font-size: 13px;">
@@ -6180,7 +6398,7 @@ async function approveGuestVehicleEntry() {
                             <span style="font-size: 11px; padding: 3px 10px; border-radius: 10px; background: rgba(245, 158, 11, 0.2); color: #d97706; font-weight: bold;">
                                 🙋‍♂️ GUEST (${data.category})
                             </span>
-                            <span style="color: var(--primary-color); font-weight: bold;">Assigned Bay: ${data.slot_name}</span>
+                            <span style="color: var(--primary-color); font-weight: bold;">Assigned Bay: ${slotName}</span>
                             <span style="color: var(--text-muted); font-size: 11px;">(Owner: ${data.owner_name})</span>
                         </div>
                     </div>
@@ -6198,6 +6416,16 @@ async function approveGuestVehicleEntry() {
         console.error("Guest authorize error:", err);
         alert("Error authorizing guest entry: " + err.message);
     }
+}
+
+async function approveGuestVehicleEntry() {
+    const plate = document.getElementById("guestModalPlateHidden")?.value;
+    const ownerName = document.getElementById("guestOwnerName")?.value || "Visitor / Guest";
+    const category = document.getElementById("guestCategory")?.value || "Car";
+    const purpose = document.getElementById("guestPurpose")?.value || "Visitor Access";
+
+    if (!plate) return;
+    await authorizeGuestEntryDirect(plate, ownerName, category, purpose, currentGuestSnapshot);
 }
 
 async function denyGuestVehicleEntry() {
@@ -6241,57 +6469,8 @@ async function approveInlineGuestEntry(plate) {
     const category = document.getElementById("inlineGuestCategory")?.value || "Car";
     const purpose = document.getElementById("inlineGuestPurpose")?.value || "Visitor Access";
 
-    const resultEl = document.getElementById("smartGateResult");
-    if (resultEl) {
-        resultEl.style.display = "block";
-        resultEl.innerHTML = `<div style="color: var(--text-muted); font-size: 13px;">⌛ Authorizing Guest Entry Pass for <strong>${plate}</strong>...</div>`;
-    }
-
-    try {
-        const response = await fetch(API_URL + "/entrance/guest-authorize", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                plate_number: plate,
-                owner_name: ownerName,
-                category: category,
-                purpose: purpose
-            })
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-            if (resultEl) {
-                resultEl.innerHTML = `
-                    <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 14px; font-size: 13px;">
-                        <div style="font-weight: 800; color: #047857; font-size: 15px; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
-                            <span>🟢 GUEST PASS: ENTRY AUTHORIZED BY OFFICER</span>
-                            <span style="font-size: 11px; background: #10b981; color: white; padding: 3px 10px; border-radius: 10px;">BARRIER OPENED</span>
-                        </div>
-                        <div style="display: flex; gap: 10px; align-items: center; margin-top: 8px;">
-                            <span class="plate-tag" style="margin: 0; font-size: 15px;">${data.plate_number}</span>
-                            <span style="font-size: 11px; padding: 3px 10px; border-radius: 10px; background: rgba(245, 158, 11, 0.2); color: #d97706; font-weight: bold;">
-                                🙋‍♂️ GUEST (${data.category})
-                            </span>
-                            <span style="color: var(--primary-color); font-weight: bold;">Assigned Bay: ${data.slot_name}</span>
-                            <span style="color: var(--text-muted); font-size: 11px;">(Owner: ${data.owner_name})</span>
-                        </div>
-                    </div>
-                `;
-            }
-            const inputEl = document.getElementById("smartGatePlateInput");
-            if (inputEl) inputEl.value = "";
-            loadDashboardData();
-            loadParkingData();
-            if (typeof loadEntranceData === "function") loadEntranceData();
-        } else {
-            alert("Failed to authorize guest entry: " + (data.detail || data.message));
-        }
-    } catch (err) {
-        console.error("Inline guest authorize error:", err);
-        alert("Error authorizing guest entry: " + err.message);
-    }
+    if (!plate) return;
+    await authorizeGuestEntryDirect(plate, ownerName, category, purpose, null);
 }
 
 async function denyInlineGuestEntry(plate) {
@@ -6345,12 +6524,15 @@ async function processDepartureGateManual(targetPlate) {
         const response = await fetch(API_URL + "/parking/exit-process", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ plate_number: plate })
+            body: JSON.stringify({ plate_number: plate, force_override: true })
         });
 
         const data = await response.json();
 
         if (response.ok) {
+            removeFromTransit(data.plate_number);
+            removeFromTransit(plate);
+
             if (resultEl) {
                 resultEl.innerHTML = `
                     <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 14px; font-size: 13px;">
@@ -6503,6 +6685,12 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 async function showDetectionConfirmModal(data) {
+    const currentMode = getVerificationMode();
+    if (currentMode === "auto") {
+        console.log("[Verification Mode: Auto] Suppressing confirmation modal, auto-admitting vehicle without popup.");
+        return;
+    }
+
     activeVerificationData = data;
     const modal = document.getElementById("detectionConfirmModal");
     if (!modal) return;
@@ -6537,33 +6725,28 @@ async function showDetectionConfirmModal(data) {
         plateInputEl.value = currentPlate;
     }
 
-    let isParked = Boolean(data.is_parked === true);
-    let slotName = data.parking_slot || null;
-    let staySec = (data.stay_seconds !== undefined) ? data.stay_seconds : 999;
-    let inTransit = Boolean(data.in_transit_buffer === true);
-    let remSec = data.transit_remaining_sec || 0;
+    let isParked = Boolean(data.is_parked === true || isPlateInTransitInside(currentPlate));
+    let slotName = data.parking_slot || getTransitSlot(currentPlate) || null;
+    let staySec = (data.stay_seconds !== undefined) ? data.stay_seconds : 0;
 
     // Check active parking list to determine exact entry timestamp and slot
     if (currentPlate) {
         try {
-            const activeRes = await fetch(API_URL + "/parking/active");
-            if (activeRes.ok) {
-                const activeList = await activeRes.json();
-                const cleanTarget = currentPlate.replace(/[\s\-_]/g, "");
-                const matchedActive = activeList.find(v => v.plate_number && v.plate_number.replace(/[\s\-_]/g, "").toUpperCase() === cleanTarget);
-                if (matchedActive) {
-                    isParked = true;
-                    slotName = matchedActive.slot_number || matchedActive.slot_name || slotName;
-                    if (matchedActive.entry_time) {
-                        const entryMs = new Date(matchedActive.entry_time).getTime();
-                        if (!isNaN(entryMs)) {
-                            staySec = Math.max(0, Math.floor((Date.now() - entryMs) / 1000));
-                            inTransit = staySec < 60;
-                            remSec = Math.max(0, 60 - staySec);
+            fetch(API_URL + "/parking/active").then(r => r.json()).then(activeList => {
+                if (Array.isArray(activeList)) {
+                    const matchedActive = activeList.find(v => v.plate_number && arePlatesMatching(v.plate_number, currentPlate));
+                    if (matchedActive) {
+                        isParked = true;
+                        slotName = matchedActive.slot_number || matchedActive.slot_name || slotName;
+                        if (matchedActive.entry_time) {
+                            const entryMs = new Date(matchedActive.entry_time).getTime();
+                            if (!isNaN(entryMs)) {
+                                staySec = Math.max(0, Math.floor((Date.now() - entryMs) / 1000));
+                            }
                         }
                     }
                 }
-            }
+            }).catch(() => {});
         } catch (e) {}
     }
 
@@ -6572,40 +6755,27 @@ async function showDetectionConfirmModal(data) {
 
     const lang = currentLang || "en";
     const t = (translations && translations[lang]) ? translations[lang] : (translations["en"] || {});
+    const guestSection = document.getElementById("confirmModalGuestSection");
 
     if (isParked) {
         // ================= VEHICLE EXIT / DEPARTURE MODE =================
+        if (guestSection) guestSection.style.display = "none";
         if (titleEl) titleEl.innerText = t.modal_exit_title || "Vehicle Departure Verification (Exit Gate)";
         if (subtitleEl) subtitleEl.innerText = slotName 
             ? `Vehicle is currently parked in ${slotName} — Confirm exit authorization`
             : (t.modal_exit_sub || "Review vehicle snapshot and confirm exit authorization");
 
-        if (inTransit && remSec > 0) {
-            if (statusBadgeEl) {
-                statusBadgeEl.innerHTML = `🚗 <strong style="color: #0369a1;">Currently Inside (${slotName || 'Bay'})</strong><br><span style="font-size:11px; font-weight: bold; color:#b45309;">⚠️ Gate Transit in Progress (Entered ${staySec}s ago — Exit locked for ${remSec}s)</span>`;
-                statusBadgeEl.style.color = "#b45309";
-            }
+        if (statusBadgeEl) {
+            statusBadgeEl.innerHTML = `🚗 <strong style="color: #047857;">Currently Inside (${slotName || 'Slot Assigned'})</strong><br><span style="font-size:11px; font-weight: normal; color:#64748b;">Owner: ${data.owner_name || 'Visitor / Guest'} | Action: Vehicle Exit (Stay: ${staySec}s)</span>`;
+            statusBadgeEl.style.color = "#047857";
+        }
 
-            if (approveBtn) {
-                approveBtn.disabled = true;
-                approveBtn.innerHTML = `⏳ Exit Locked (${remSec}s Transit Protection)`;
-                approveBtn.style.background = "#94a3b8";
-                approveBtn.style.borderColor = "#94a3b8";
-                approveBtn.style.cursor = "not-allowed";
-            }
-        } else {
-            if (statusBadgeEl) {
-                statusBadgeEl.innerHTML = `🚗 <strong style="color: #047857;">Currently Inside (${slotName || 'Slot Assigned'})</strong><br><span style="font-size:11px; font-weight: normal; color:#64748b;">Owner: ${data.owner_name || 'Visitor / Guest'} | Action: Vehicle Exit (Stay: ${staySec}s)</span>`;
-                statusBadgeEl.style.color = "#047857";
-            }
-
-            if (approveBtn) {
-                approveBtn.disabled = false;
-                approveBtn.innerHTML = t.btn_confirm_grant_exit || t.btn_confirm_process_exit || `🟢 Confirm & Grant Exit`;
-                approveBtn.style.background = "#10b981";
-                approveBtn.style.borderColor = "#10b981";
-                approveBtn.style.cursor = "pointer";
-            }
+        if (approveBtn) {
+            approveBtn.disabled = false;
+            approveBtn.innerHTML = t.btn_confirm_grant_exit || t.btn_confirm_process_exit || `🟢 Confirm & Grant Exit`;
+            approveBtn.style.background = "#10b981";
+            approveBtn.style.borderColor = "#10b981";
+            approveBtn.style.cursor = "pointer";
         }
 
         if (denyBtn) {
@@ -6616,49 +6786,48 @@ async function showDetectionConfirmModal(data) {
         if (titleEl) titleEl.innerText = t.modal_verif_title || "Vehicle Detection Verification";
         if (subtitleEl) subtitleEl.innerText = t.modal_verif_sub || "Review vehicle snapshot and confirm entrance authorization";
 
-        const inExitCooldown = Boolean(data.in_exit_cooldown === true || data.action_type === "exit_cooldown");
-        const exitCdRem = data.exit_cooldown_remaining_sec || 0;
-
-        if (inExitCooldown && exitCdRem > 0) {
-            if (statusBadgeEl) {
-                statusBadgeEl.innerHTML = `⏳ <strong style="color: #d97706;">Vehicle Recently Exited</strong><br><span style="font-size:11px; font-weight: bold; color:#b45309;">⚠️ Transit Cooldown Active — Re-entry locked for ${exitCdRem}s</span>`;
+        if (statusBadgeEl) {
+            if (data.is_registered) {
+                if (guestSection) guestSection.style.display = "none";
+                statusBadgeEl.innerHTML = `🟢 <strong>Registered Vehicle</strong><br><span style="font-size:11px; font-weight: normal; color:#64748b;">Owner: ${data.owner_name || 'System Registry'}</span>`;
+                statusBadgeEl.style.color = "#047857";
+            } else {
+                if (guestSection) {
+                    guestSection.style.display = "block";
+                    const catSelect = document.getElementById("confirmModalCategory");
+                    if (catSelect && data.category) {
+                        catSelect.value = data.category;
+                    }
+                    const nameInput = document.getElementById("confirmModalGuestName");
+                    if (nameInput && data.owner_name && data.owner_name !== "Unknown / Unregistered" && data.owner_name !== "Unregistered") {
+                        nameInput.value = data.owner_name;
+                    }
+                }
+                statusBadgeEl.innerHTML = `⏳ <strong style="color: #d97706;">UNREGISTERED VEHICLE — PENDING AUTHORIZATION</strong><br><span style="font-size:11px; font-weight: 600; color:#64748b;">Barrier locked. Enter visitor details below to authorize:</span>`;
                 statusBadgeEl.style.color = "#d97706";
-            }
-            if (approveBtn) {
-                approveBtn.disabled = true;
-                approveBtn.innerHTML = `⏳ Re-entry Locked (${exitCdRem}s Cooldown)`;
-                approveBtn.style.background = "#94a3b8";
-                approveBtn.style.borderColor = "#94a3b8";
-                approveBtn.style.cursor = "not-allowed";
-            }
-        } else {
-            if (statusBadgeEl) {
-                if (data.is_registered) {
-                    statusBadgeEl.innerHTML = `🟢 <strong>Registered Vehicle</strong><br><span style="font-size:11px; font-weight: normal; color:#64748b;">Owner: ${data.owner_name || 'System Registry'}</span>`;
-                    statusBadgeEl.style.color = "#047857";
-                } else {
-                    statusBadgeEl.innerHTML = `⏳ <strong style="color: #d97706;">UNREGISTERED VEHICLE — PENDING AUTHORIZATION</strong><br><span style="font-size:11px; font-weight: 600; color:#64748b;">Barrier locked. Select Guest Pass or Deny Entry below:</span>`;
-                    statusBadgeEl.style.color = "#d97706";
-                }
-            }
-
-            if (approveBtn) {
-                approveBtn.disabled = false;
-                if (data.is_registered) {
-                    approveBtn.innerHTML = t.btn_confirm_grant_entrance || `🟢 Confirm & Grant Entrance`;
-                    approveBtn.style.background = "#10b981";
-                    approveBtn.style.borderColor = "#10b981";
-                } else {
-                    approveBtn.innerHTML = `🙋‍♂️ Authorize Guest Pass`;
-                    approveBtn.style.background = "#f59e0b";
-                    approveBtn.style.borderColor = "#d97706";
-                }
-                approveBtn.style.cursor = "pointer";
             }
         }
 
+        if (approveBtn) {
+            approveBtn.disabled = false;
+            if (data.is_registered) {
+                approveBtn.innerHTML = t.btn_confirm_grant_entrance || `🟢 Confirm & Grant Entrance`;
+                approveBtn.style.background = "#10b981";
+                approveBtn.style.borderColor = "#10b981";
+            } else {
+                approveBtn.innerHTML = `🟢 Authorize Guest Pass & Open Barrier`;
+                approveBtn.style.background = "#059669";
+                approveBtn.style.borderColor = "#047857";
+                approveBtn.style.color = "#ffffff";
+            }
+            approveBtn.style.cursor = "pointer";
+        }
+
         if (denyBtn) {
-            denyBtn.innerHTML = t.btn_deny_flag_alert || `🔴 Deny Entry & Flag Alert`;
+            denyBtn.innerHTML = `🔴 Deny Entry & Flag Alert`;
+            denyBtn.style.background = "rgba(239, 68, 68, 0.08)";
+            denyBtn.style.borderColor = "#ef4444";
+            denyBtn.style.color = "#dc2626";
         }
     }
 
@@ -6683,19 +6852,23 @@ async function approveDetectionConfirmModal() {
         return;
     }
 
-    let isExit = Boolean(activeVerificationData && activeVerificationData.is_parked === true);
+    let isExit = Boolean(activeVerificationData && activeVerificationData.is_parked === true || isPlateInTransitInside(plate));
     let isReg = Boolean(activeVerificationData && activeVerificationData.is_registered === true);
     const snap = activeVerificationData ? activeVerificationData.snapshot : null;
 
+    // Read entered guest information from the form
+    const enteredGuestName = document.getElementById("confirmModalGuestName")?.value || "Visitor / Guest";
+    const enteredCategory = document.getElementById("confirmModalCategory")?.value || (activeVerificationData && activeVerificationData.category) || "Car";
+    const enteredPurpose = document.getElementById("confirmModalPurpose")?.value || "Visitor Access";
+
     // If operator edited the plate number in the input, verify active status & registration for the edited plate
-    if (activeVerificationData && activeVerificationData.plate_number && activeVerificationData.plate_number.toUpperCase() !== plate) {
+    if (activeVerificationData && activeVerificationData.plate_number && !arePlatesMatching(activeVerificationData.plate_number, plate)) {
         try {
             const activeRes = await fetch(API_URL + "/parking/active");
             if (activeRes.ok) {
                 const activeList = await activeRes.json();
-                const cleanTarget = plate.replace(/[\s\-_]/g, "");
-                const matchedActive = activeList.find(v => v.plate_number && v.plate_number.replace(/[\s\-_]/g, "").toUpperCase() === cleanTarget);
-                isExit = Boolean(matchedActive);
+                const matchedActive = activeList.find(v => v.plate_number && arePlatesMatching(v.plate_number, plate));
+                isExit = Boolean(matchedActive || isPlateInTransitInside(plate));
             }
             const checkRes = await fetch(API_URL + "/vehicles/plate/" + plate, {
                 headers: token ? { "Authorization": "Bearer " + token } : {}
@@ -6718,54 +6891,8 @@ async function approveDetectionConfirmModal() {
         // Registered vehicle -> Grant normal entrance
         await processArrivalGateManual(plate, true);
     } else {
-        // Unregistered / Unknown vehicle -> STRICTLY route to Guest Pass Authorization!
-        showGuestAuthModal(plate, snap);
-        const resultEl = document.getElementById("smartGateResult");
-        if (resultEl) {
-            resultEl.style.display = "block";
-            resultEl.innerHTML = `
-                <div style="background: #fffbeb; border: 2px solid #f59e0b; border-radius: 12px; padding: 16px; margin-top: 10px; box-shadow: 0 8px 20px rgba(245, 158, 11, 0.15);">
-                    <div style="font-weight: 800; font-size: 15px; color: #b45309; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
-                        <span>🛑 UNKNOWN VEHICLE: <span class="plate-tag" style="font-size: 15px; margin: 0 4px; padding: 2px 8px;">${plate}</span></span>
-                        <span style="font-size: 11px; background: #f59e0b; color: white; padding: 3px 10px; border-radius: 12px; font-weight: 800;">OFFICER AUTHORIZATION REQUIRED</span>
-                    </div>
-                    <p style="font-size: 12px; color: #92400e; margin-bottom: 12px; font-weight: 600;">
-                        Barrier remains <strong>LOCKED</strong>. Plate <strong>${plate}</strong> is not registered. Fill in visitor details below or via popup to authorize entry:
-                    </p>
-
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
-                        <div>
-                            <label style="font-size: 11px; font-weight: 700; color: #78350f; display: block; margin-bottom: 4px;">Guest Name</label>
-                            <input type="text" id="inlineGuestName" value="Visitor / Guest" class="form-input" style="height: 36px; font-size: 12px; border-color: #fcd34d;">
-                        </div>
-                        <div>
-                            <label style="font-size: 11px; font-weight: 700; color: #78350f; display: block; margin-bottom: 4px;">Vehicle Category</label>
-                            <select id="inlineGuestCategory" class="form-input" style="height: 36px; font-size: 12px; background: white; border-color: #fcd34d; font-weight: bold; color: var(--text-main);">
-                                <option value="Car">Car</option>
-                                <option value="Tuk Tuk">Tuk Tuk</option>
-                                <option value="Bike">Bike</option>
-                                <option value="Van">Van</option>
-                                <option value="Bus">Bus</option>
-                                <option value="Truck">Truck</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style="font-size: 11px; font-weight: 700; color: #78350f; display: block; margin-bottom: 4px;">Purpose / Notes</label>
-                            <input type="text" id="inlineGuestPurpose" value="Visitor Access" class="form-input" style="height: 36px; font-size: 12px; border-color: #fcd34d;">
-                        </div>
-                    </div>
-
-                    <div style="display: flex; gap: 10px;">
-                        <button onclick="approveInlineGuestEntry('${plate}')" class="btn-primary" style="flex: 2; height: 38px; font-size: 13px; font-weight: 800; background: #10b981; border-color: #10b981; display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0;">
-                            <span>🟢 Approve Guest Entry & Open Gate</span>
-                        </button>
-                        <button onclick="denyGuestVehicleEntry()" class="btn-secondary" style="flex: 1; height: 38px; font-size: 13px; font-weight: 800; color: #ef4444; border-color: #ef4444; background: rgba(239, 68, 68, 0.1); margin: 0;">
-                            <span>🔴 Deny & Flag Alert</span>
-                        </button>
-                    </div>
-                </div>
-            `;
-        }
+        // Unregistered / Unknown vehicle -> Authorize with entered guest details!
+        await authorizeGuestEntryDirect(plate, enteredGuestName, enteredCategory, enteredPurpose, snap);
     }
 }
 
@@ -6926,6 +7053,18 @@ function setupGateCanvasListeners() {
             activeGateDragPin = null;
             canvas.style.cursor = "crosshair";
             renderGateColliderCanvas();
+            // Auto-save and sync calibrated collider positions to local storage & backend in real-time
+            try {
+                localStorage.setItem("gate_colliders_config", JSON.stringify(gateColliderConfig));
+                fetch(`${API_URL}/entrance/gate-colliders`, {
+                    method: "POST",
+                    headers: { 
+                        "Content-Type": "application/json",
+                        ...(token ? { "Authorization": "Bearer " + token } : {})
+                    },
+                    body: JSON.stringify(gateColliderConfig)
+                }).catch(() => {});
+            } catch (e) {}
         }
     }
 
@@ -7025,7 +7164,7 @@ function renderGateColliderCanvas() {
     ctx.shadowBlur = 0;
     ctx.fillStyle = "rgba(16, 185, 129, 0.9)";
     ctx.font = "bold 11px system-ui, sans-serif";
-    const greenText = `🟢 INNER DRIVEWAY (${gateColliderConfig.driveway_depth_cm || 550} cm depth)`;
+    const greenText = `🟢 GREEN TRIGGER LINE (${gateColliderConfig.driveway_depth_cm || 550} cm depth)`;
     const greenWidth = ctx.measureText(greenText).width + 16;
     ctx.fillRect(greenMidX - greenWidth / 2, greenMidY + 6, greenWidth, 18);
     ctx.fillStyle = "#ffffff";
@@ -7309,26 +7448,59 @@ function renderGateLinesOnLiveStream(canvas, video) {
     const scaleY = vh / 380;
     const { pin_a, pin_b, pin_c, pin_d } = gateColliderConfig;
 
-    // Draw Red Line
+    const redX1 = pin_a.x * scaleX, redY1 = pin_a.y * scaleY;
+    const redX2 = pin_b.x * scaleX, redY2 = pin_b.y * scaleY;
+    const greenX1 = pin_c.x * scaleX, greenY1 = pin_c.y * scaleY;
+    const greenX2 = pin_d.x * scaleX, greenY2 = pin_d.y * scaleY;
+
+    // 1. Draw 🔴 Red Line (Outer Gate / Auto-Exit Only)
     ctx.save();
     ctx.shadowColor = "#ef4444";
-    ctx.shadowBlur = 10;
-    ctx.strokeStyle = "rgba(239, 68, 68, 0.9)";
-    ctx.lineWidth = 3;
+    ctx.shadowBlur = 12;
+    ctx.strokeStyle = "rgba(239, 68, 68, 0.95)";
+    ctx.lineWidth = 3.5;
     ctx.beginPath();
-    ctx.moveTo(pin_a.x * scaleX, pin_a.y * scaleY);
-    ctx.lineTo(pin_b.x * scaleX, pin_b.y * scaleY);
+    ctx.moveTo(redX1, redY1);
+    ctx.lineTo(redX2, redY2);
     ctx.stroke();
 
-    // Draw Green Line
-    ctx.shadowColor = "#10b981";
-    ctx.shadowBlur = 10;
-    ctx.strokeStyle = "rgba(16, 185, 129, 0.9)";
-    ctx.lineWidth = 3;
+    const redMidX = (redX1 + redX2) / 2;
+    const redMidY = (redY1 + redY2) / 2;
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(220, 38, 38, 0.92)";
+    ctx.font = "bold 11px Inter, system-ui, sans-serif";
+    const redLabel = "🔴 RED LINE: AUTO-EXIT ONLY";
+    const redLabelW = ctx.measureText(redLabel).width + 16;
+    ctx.fillRect(redMidX - redLabelW / 2, redMidY - 20, redLabelW, 18);
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.fillText(redLabel, redMidX, redMidY - 7);
+    ctx.restore();
+
+    // 2. Draw 🟢 Green Line (Driveway / Scanning Initiation Line)
+    // No green box: Clean trigger line that pulses when vehicle touches the line!
+    const isGreenTouched = Boolean(window._lastGreenLineTouchTime && (Date.now() - window._lastGreenLineTouchTime < 1800));
+    ctx.save();
+    ctx.shadowColor = isGreenTouched ? "#34d399" : "#10b981";
+    ctx.shadowBlur = isGreenTouched ? 24 : 12;
+    ctx.strokeStyle = isGreenTouched ? "rgba(52, 211, 153, 1)" : "rgba(16, 185, 129, 0.95)";
+    ctx.lineWidth = isGreenTouched ? 5.5 : 3.5;
     ctx.beginPath();
-    ctx.moveTo(pin_c.x * scaleX, pin_c.y * scaleY);
-    ctx.lineTo(pin_d.x * scaleX, pin_d.y * scaleY);
+    ctx.moveTo(greenX1, greenY1);
+    ctx.lineTo(greenX2, greenY2);
     ctx.stroke();
+
+    const greenMidX = (greenX1 + greenX2) / 2;
+    const greenMidY = (greenX1 ? (greenY1 + greenY2) / 2 : greenY1);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = isGreenTouched ? "rgba(5, 150, 105, 0.96)" : "rgba(16, 185, 129, 0.92)";
+    ctx.font = "bold 11px Inter, system-ui, sans-serif";
+    const greenLabel = isGreenTouched ? "🟢 GREEN LINE [TOUCH ACTIVATED]" : "🟢 GREEN LINE: TOUCH TO SCAN & ENTER";
+    const greenLabelW = ctx.measureText(greenLabel).width + 16;
+    ctx.fillRect(greenMidX - greenLabelW / 2, greenMidY + 4, greenLabelW, 18);
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.fillText(greenLabel, greenMidX, greenMidY + 17);
     ctx.restore();
 }
 

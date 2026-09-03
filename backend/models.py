@@ -158,6 +158,9 @@ class ParkingSession(Base):
         default="Active"
     )
 
+    vehicle = relationship("Vehicle")
+    slot = relationship("ParkingSlot")
+
 
 class EntranceRecord(Base):
     __tablename__ = "entrance_records"

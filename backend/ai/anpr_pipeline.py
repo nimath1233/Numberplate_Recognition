@@ -172,10 +172,80 @@ class ANPRPipeline:
 
 
     # =====================================================
+    # VIRTUAL TRIPWIRE LINE TOUCH CHECKER (SPATIAL GATING)
+    # =====================================================
+
+    @staticmethod
+    def is_touching_virtual_tripwire(plate: Dict[str, Any], gate_config: Dict[str, Any], img_w: int, img_h: int) -> bool:
+        """
+        Returns True if the vehicle body (ByteTracker) or plate bbox intersects
+        the Red Line (exit) or Green Line (entrance).
+        """
+        if not gate_config:
+            return True
+
+        bbox = plate.get("bbox")
+        vbox = plate.get("vehicle_bbox")
+        primary_box = vbox if (vbox and len(vbox) == 4) else bbox
+        if not primary_box or len(primary_box) < 4:
+            return False
+
+        scale_x = 640.0 / max(1, img_w)
+        scale_y = 380.0 / max(1, img_h)
+
+        bx1, by1, bx2, by2 = primary_box
+        norm_x1 = bx1 * scale_x
+        norm_x2 = bx2 * scale_x
+        norm_y1 = by1 * scale_y
+        norm_y2 = by2 * scale_y
+        norm_cx = (norm_x1 + norm_x2) / 2.0
+
+        pin_a = gate_config.get("pin_a", {"x": 80.0, "y": 140.0})
+        pin_b = gate_config.get("pin_b", {"x": 560.0, "y": 140.0})
+        pin_c = gate_config.get("pin_c", {"x": 80.0, "y": 340.0})
+        pin_d = gate_config.get("pin_d", {"x": 560.0, "y": 340.0})
+
+        pin_a_x, pin_a_y = float(pin_a.get("x", 80.0)), float(pin_a.get("y", 140.0))
+        pin_b_x, pin_b_y = float(pin_b.get("x", 560.0)), float(pin_b.get("y", 140.0))
+        if pin_b_x != pin_a_x:
+            red_y = pin_a_y + ((pin_b_y - pin_a_y) / (pin_b_x - pin_a_x)) * (norm_cx - pin_a_x)
+        else:
+            red_y = (pin_a_y + pin_b_y) / 2.0
+
+        pin_c_x, pin_c_y = float(pin_c.get("x", 80.0)), float(pin_c.get("y", 340.0))
+        pin_d_x, pin_d_y = float(pin_d.get("x", 560.0)), float(pin_d.get("y", 340.0))
+        if pin_d_x != pin_c_x:
+            green_y = pin_c_y + ((pin_d_y - pin_c_y) / (pin_d_x - pin_c_x)) * (norm_cx - pin_c_x)
+        else:
+            green_y = (pin_c_y + pin_d_y) / 2.0
+
+        # 1. Red Line touch check (Outer gate boundary)
+        if norm_y1 <= red_y + 25.0:
+            return True
+
+        # 2. Green Line touch check (Inner entrance line)
+        min_green_x = min(pin_c_x, pin_d_x) - 20.0
+        max_green_x = max(pin_c_x, pin_d_x) + 20.0
+        has_x_overlap = (norm_x2 >= min_green_x) and (norm_x1 <= max_green_x)
+        if has_x_overlap and ((norm_y1 - 20.0) <= green_y <= (norm_y2 + 20.0)):
+            return True
+
+        # Also check plate bbox touch if vehicle_bbox was primary
+        if bbox and len(bbox) == 4 and vbox:
+            px1, py1, px2, py2 = bbox
+            p_ny1, p_ny2 = py1 * scale_y, py2 * scale_y
+            p_nx1, p_nx2 = px1 * scale_x, px2 * scale_x
+            p_has_x = (p_nx2 >= min_green_x) and (p_nx1 <= max_green_x)
+            if p_has_x and ((p_ny1 - 25.0) <= green_y <= (p_ny2 + 25.0)):
+                return True
+
+        return False
+
+    # =====================================================
     # PROCESS ONE IMAGE
     # =====================================================
 
-    def process(self, image):
+    def process(self, image, gate_config: Optional[Dict[str, Any]] = None, force_ocr: bool = False):
 
         start = time.perf_counter()
 
@@ -238,15 +308,36 @@ class ANPRPipeline:
         detections = plate_detections
         results = []
 
-
-
         # =================================================
-        # PROCESS EACH PLATE
+        # PROCESS EACH PLATE (SPATIAL-GATED OCR)
         # =================================================
+
+        img_h, img_w = image.shape[:2]
 
         for plate in detections:
 
             try:
+                # Spatial tripwire check: If vehicle has not touched Green or Red line, sleep OCR!
+                is_touched = True
+                if not force_ocr and gate_config:
+                    is_touched = self.is_touching_virtual_tripwire(plate, gate_config, img_w, img_h)
+
+                if not is_touched:
+                    # OCR IS ASLEEP / DORMANT 💤 (Saves 80% CPU)
+                    plate["is_ocr_asleep"] = True
+                    plate["text"] = ""
+                    plate["raw_plate"] = ""
+                    plate["normalized_plate"] = ""
+                    plate["validated_text"] = ""
+                    plate["ocr_confidence"] = 0.0
+                    plate["ocr_time_ms"] = 0.0
+                    plate["valid"] = False
+                    plate["plate_category"] = "Standby"
+                    plate["plate_type"] = "Standby"
+                    results.append(plate)
+                    continue
+
+                plate["is_ocr_asleep"] = False
 
                 # =========================================
                 # 1. PERSPECTIVE RECTIFICATION
